@@ -102,7 +102,6 @@ internal sealed class GrandpaFighterBehavior
             if (_state != State.Orbiting)
             {
                 TransitionTo(State.Orbiting);
-                _monitor?.Log("[Fighter] SAN <= 0, stopping combat", LogLevel.Info);
             }
             return;
         }
@@ -116,7 +115,6 @@ internal sealed class GrandpaFighterBehavior
 
             if (distToPlayer > LeashRadius || targetDistToPlayer > LeashRadius)
             {
-                _monitor?.Log("[Fighter] Leash exceeded, returning to orbit", LogLevel.Info);
                 TransitionTo(State.Orbiting);
             }
         }
@@ -146,7 +144,6 @@ internal sealed class GrandpaFighterBehavior
             return;
 
         _target = monsters[0]; // nearest
-        _monitor?.Log($"[Fighter] Targeting {_target.GetType().Name} at HP={_target.Health}", LogLevel.Info);
         TransitionTo(State.MovingToTarget);
     }
 
@@ -189,7 +186,6 @@ internal sealed class GrandpaFighterBehavior
         // Safety timeout — don't get stuck on one monster
         if (_attackTick >= MaxAttackTicks)
         {
-            _monitor?.Log("[Fighter] Attack timeout, moving on", LogLevel.Info);
             DrawShakeOffset = Vector2.Zero;
             TransitionTo(State.Cooldown);
             return;
@@ -285,23 +281,14 @@ internal sealed class GrandpaFighterBehavior
         // Use the game's native damage method
         monster.takeDamage(damage, xKnockback, yKnockback, false, 0, player);
 
-        _monitor?.Log(
-            $"[Fighter] Hit {monster.GetType().Name}  dmg={damage}  HP: {healthBefore}→{monster.Health}  "
-            + $"dist={Vector2.Distance(WorldPosition, monsterPos):F0}px",
-            LogLevel.Info);
-
         // Small SAN cost per hit
         SanManager.AddSan(player, -0.5f);
-
-        // Play hit sound (use the actual combat hit cue name)
-        loc.playSound("shadowbeast_attack");
 
         // If the monster died, consume a bit more SAN and move on
         if (monster.Health <= 0)
         {
             SanManager.AddSan(player, -2f);
             loc.playSound("cowboy_monsterhit");
-            _monitor?.Log($"[Fighter] Killed {monster.GetType().Name}!", LogLevel.Info);
         }
     }
 

@@ -46,7 +46,6 @@ internal sealed class ModEntry : Mod
         helper.Events.GameLoop.DayEnding     += OnDayEnding;
         helper.Events.Display.RenderedWorld  += OnRenderedWorld;
         helper.Events.Display.RenderedHud    += OnRenderedHud;
-        helper.Events.Input.ButtonPressed    += OnButtonPressed;
 
         PlantingExecutor.SetMonitor(Monitor);
     }
@@ -58,11 +57,18 @@ internal sealed class ModEntry : Mod
 
         // ── Detect Mystic Syrup consumption ──────────────────────
         // When the player drinks Mystic Syrup, the game plays an eating
-        // animation. We detect the transition isEating: true → false
-        // and summon Grandpa after the syrup is actually consumed.
+        // animation. We detect the start of eating and check if the item
+        // is Mystic Syrup, then summon Grandpa when eating completes.
+        // This is button-independent — works on PC, mobile, and controller.
         if (Game1.player != null)
         {
             bool isEating = Game1.player.isEating;
+            if (!_wasEating && isEating)
+            {
+                // Eating just started — check if holding Mystic Syrup
+                if (Game1.player.CurrentItem?.QualifiedItemId == "(O)MysticSyrup")
+                    _pendingSummon = true;
+            }
             if (_pendingSummon && _wasEating && !isEating)
             {
                 _pendingSummon = false;
@@ -222,30 +228,6 @@ internal sealed class ModEntry : Mod
         // Grandpa leaves — no fade-out animation needed (screen is already fading to black)
         grandpaSpirit.Dismiss();
         SanBarDrawer.ShouldDraw = false;
-    }
-
-    /// <summary>
-    /// Detects the player pressing the action button while holding Mystic Syrup.
-    /// Lets the game's natural eating animation play, then summons the grandpa
-    /// spirit after the syrup is consumed (handled in OnUpdateTicked).
-    /// Works anywhere — not restricted to the Farm.
-    /// </summary>
-    private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
-    {
-        if (!Context.IsWorldReady)
-            return;
-
-        // Only care about the "use/action" button (right-click or 'e' on keyboard)
-        if (e.Button != SButton.MouseRight && e.Button != SButton.E)
-            return;
-
-        // Must be holding Mystic Syrup
-        if (Game1.player?.CurrentItem?.QualifiedItemId != "(O)MysticSyrup")
-            return;
-
-        // Don't suppress — let the game's eating animation play naturally.
-        // OnUpdateTicked will detect when eating completes and summon Grandpa.
-        _pendingSummon = true;
     }
 
     /// <summary>

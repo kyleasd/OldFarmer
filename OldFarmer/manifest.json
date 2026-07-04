@@ -1,7 +1,7 @@
 {
   "Name": "OldFarmer",
   "Author": "鹈鹕镇的小凯",
-  "Version": "1.0.0",
+  "Version": "1.1.0",
   "Description": "老农民",
   "UniqueID": "Kyle.OldFarmer",
   "EntryDll": "OldFarmer.dll",

@@ -6,14 +6,19 @@ using StardewValley.BellsAndWhistles;
 namespace OldFarmer;
 
 /// <summary>Draws the vanilla grandpa spirit sprite orbiting the player.</summary>
+/// <remarks>
+/// Multiple instances can coexist — each manages its own orbit angle and
+/// fade state independently. Use <paramref name="angleOffset"/> to spread
+/// multiple grandpas evenly around the orbit circle.
+/// </remarks>
 internal sealed class GrandpaSpiritOrbiter
 {
-    public static GrandpaSpiritOrbiter? Instance { get; private set; }
-
     private const string TexturePath = "LooseSprites\\Cursors";
     private static readonly Rectangle SourceRect = new(555, 1956, 18, 35);
     private const float Scale = 8f;
-    private const float OrbitRadius = 200f;
+    private const float BaseOrbitRadius = 200f;
+    private const float OrbitRadiusStep = 56f;  // each subsequent grandpa orbits further out
+    private const float OrbitYShift = -80f;     // shift orbit center upward on screen
     private const float OrbitSpeed = 0.015f;
 
     // ── fade-out animation ──────────────────────────────────────
@@ -23,22 +28,31 @@ internal sealed class GrandpaSpiritOrbiter
     private bool _isDestroyed = true; // 默认不出现，需召唤
 
     private float angle;
+    private readonly float _angleOffset;
+    private readonly float _orbitRadius;  // per-grandpa radius (BaseOrbitRadius + index * OrbitRadiusStep)
     private Texture2D? texture;
 
-    public GrandpaSpiritOrbiter()
+    /// <param name="angleOffset">
+    ///   Starting angle (radians) on the orbit circle. Pass different values
+    ///   for each grandpa to spread them visually around the player.
+    /// </param>
+    /// <param name="orbitRadius">
+    ///   Radius of this grandpa's orbit ring in pixels. Use different radii
+    ///   for each grandpa so they don't overlap when orbiting at similar angles.
+    /// </param>
+    public GrandpaSpiritOrbiter(float angleOffset = 0f, float orbitRadius = BaseOrbitRadius)
     {
-        // 不直接设置 Instance，只有 Revive() 后才激活
+        _angleOffset  = angleOffset;
+        _orbitRadius  = orbitRadius;
     }
 
     /// <summary>
     /// Returns true if the grandpa spirit is fully destroyed (fade-out complete).
-    /// ModEntry should stop updating/drawing and clean up references.
     /// </summary>
     public bool IsDestroyed => _isDestroyed;
 
     /// <summary>
     /// Returns true if the grandpa spirit is currently fading out (but not yet destroyed).
-    /// Used to check if fade-out was already triggered.
     /// </summary>
     public bool IsFadingOut() => _isFadingOut;
 
@@ -54,14 +68,13 @@ internal sealed class GrandpaSpiritOrbiter
 
     /// <summary>
     /// Instantly dismiss the grandpa spirit without fade-out animation.
-    /// Called when the day ends (player goes to sleep) — grandpa leaves overnight.
+    /// Called when the day ends (player goes to sleep).
     /// </summary>
     public void Dismiss()
     {
         _isDestroyed  = true;
         _isFadingOut  = false;
         _fadeTimer    = 0f;
-        Instance      = null;
     }
 
     /// <summary>
@@ -73,7 +86,7 @@ internal sealed class GrandpaSpiritOrbiter
         _isDestroyed = false;
         _isFadingOut = false;
         _fadeTimer    = FadeOutDuration;
-        Instance      = this;
+        angle         = _angleOffset;
     }
 
     /// <summary>
@@ -86,75 +99,33 @@ internal sealed class GrandpaSpiritOrbiter
         return (int)MathHelper.Clamp(255f * (1f - progress), 0, 255);
     }
 
-    /// <summary>
-    /// When grandpa is tilling, the behavior sets this to his current world position
-    /// so the sprite is drawn there instead of on the orbit path.
-    /// Set to null to restore normal orbiting rendering.
-    /// </summary>
+    // ── World position properties (set by modules) ──────────────
+
     public Vector2? TillingWorldPosition { get; set; }
-
-    /// <summary>
-    /// When grandpa is chopping wood, the module sets this to his current world position.
-    /// Takes priority over <see cref="TillingWorldPosition"/> and <see cref="WateringWorldPosition"/>.
-    /// </summary>
     public Vector2? WoodcuttingWorldPosition { get; set; }
-
-    /// <summary>
-    /// When grandpa is scything, the module sets this to his current world position.
-    /// Takes priority over <see cref="WoodcuttingWorldPosition"/>, <see cref="TillingWorldPosition"/>,
-    /// and <see cref="WateringWorldPosition"/>.
-    /// </summary>
     public Vector2? ScythingWorldPosition { get; set; }
-
-    /// <summary>
-    /// When grandpa is watering, the module sets this to his current world position.
-    /// Takes priority over <see cref="TillingWorldPosition"/> but not over <see cref="WoodcuttingWorldPosition"/>.
-    /// </summary>
     public Vector2? WateringWorldPosition { get; set; }
-
-    /// <summary>
-    /// When grandpa is planting seeds, the module sets this to his current world position.
-    /// Takes priority over <see cref="TillingWorldPosition"/> and <see cref="WateringWorldPosition"/>,
-    /// but not over <see cref="WoodcuttingWorldPosition"/> or <see cref="ScythingWorldPosition"/>.
-    /// </summary>
     public Vector2? PlantingWorldPosition { get; set; }
-
-    /// <summary>
-    /// When grandpa is fighting monsters, the module sets this to his current world position.
-    /// Takes the HIGHEST priority — combat overrides all other activities.
-    /// </summary>
     public Vector2? CombatWorldPosition { get; set; }
-
-    /// <summary>
-    /// When true, the grandpa sprite is tinted red to indicate combat mode.
-    /// Set by <see cref="CombatModule"/> when monsters are nearby.
-    /// </summary>
     public bool IsInCombatMode { get; set; }
-
-    /// <summary>
-    /// Additional screen-space shake offset applied during hoe charge-up.
-    /// Supplied by <see cref="GrandpaTillerBehavior"/>.
-    /// </summary>
     public Vector2 DrawShakeOffset { get; set; }
+
+    // ── orbit helpers (instance methods) ─────────────────────────
 
     /// <summary>
     /// Returns the current orbit offset from the player in world-space pixels.
-    /// Behaviors use this to keep <see cref="WorldPosition"/> in sync
-    /// while orbiting, so the transition to MovingToTarget has no teleport.
     /// </summary>
-    public static Vector2 GetOrbitOffset()
+    public Vector2 GetOrbitOffset()
     {
-        float angle = Instance?.Angle ?? 0f;
         return new Vector2(
-            (float)Math.Cos(angle) * OrbitRadius,
-            (float)Math.Sin(angle) * OrbitRadius);
+            (float)Math.Cos(angle) * _orbitRadius,
+            (float)Math.Sin(angle) * _orbitRadius + OrbitYShift);
     }
 
     /// <summary>Allow behaviors to read the current orbit angle.</summary>
-    public static float GetOrbitAngle() => Instance?.Angle ?? 0f;
+    public float GetOrbitAngle() => angle;
 
-    /// <summary>Public getter for the orbit angle (used by GetOrbitOffset).</summary>
-    public float Angle => angle;
+    // ── game loop ────────────────────────────────────────────────
 
     public void Update()
     {
@@ -167,7 +138,6 @@ internal sealed class GrandpaSpiritOrbiter
             if (_fadeTimer <= 0f)
             {
                 _isDestroyed = true;
-                Instance = null; // Clear static reference
                 return;
             }
         }
@@ -191,9 +161,13 @@ internal sealed class GrandpaSpiritOrbiter
         int fadeAlpha = GetFadeAlpha();
         Color drawColor = Color.White * (fadeAlpha / 255f);
 
+        // Combat mode tint (red)
+        if (IsInCombatMode)
+            drawColor = new Color(255, 60, 60) * (fadeAlpha / 255f);
+
+        // Priority chain: Combat > Scything > Woodcutting > Watering > Planting > Tilling > Orbit
         if (CombatWorldPosition.HasValue)
         {
-            // Grandpa is actively fighting — draw at the combat position (highest priority)
             var worldPos = CombatWorldPosition.Value;
             screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos) + DrawShakeOffset;
             layerDepth = Math.Max(0.0001f, (worldPos.Y + 32f) / 10000f);
@@ -201,7 +175,6 @@ internal sealed class GrandpaSpiritOrbiter
         }
         else if (ScythingWorldPosition.HasValue)
         {
-            // Grandpa is actively scything — draw at the scything position (highest priority)
             var worldPos = ScythingWorldPosition.Value;
             screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos) + DrawShakeOffset;
             layerDepth = Math.Max(0.0001f, (worldPos.Y + 32f) / 10000f);
@@ -209,7 +182,6 @@ internal sealed class GrandpaSpiritOrbiter
         }
         else if (WoodcuttingWorldPosition.HasValue)
         {
-            // Grandpa is actively chopping — draw at the woodcutting position
             var worldPos = WoodcuttingWorldPosition.Value;
             screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
             layerDepth = Math.Max(0.0001f, (worldPos.Y + 32f) / 10000f);
@@ -217,7 +189,6 @@ internal sealed class GrandpaSpiritOrbiter
         }
         else if (WateringWorldPosition.HasValue)
         {
-            // Grandpa is actively watering — draw at the watering position
             var worldPos = WateringWorldPosition.Value;
             screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos) + DrawShakeOffset;
             layerDepth = Math.Max(0.0001f, (worldPos.Y + 32f) / 10000f);
@@ -225,7 +196,6 @@ internal sealed class GrandpaSpiritOrbiter
         }
         else if (PlantingWorldPosition.HasValue)
         {
-            // Grandpa is actively planting — draw at the planting position
             var worldPos = PlantingWorldPosition.Value;
             screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos) + DrawShakeOffset;
             layerDepth = Math.Max(0.0001f, (worldPos.Y + 32f) / 10000f);
@@ -233,28 +203,24 @@ internal sealed class GrandpaSpiritOrbiter
         }
         else if (TillingWorldPosition.HasValue)
         {
-            // Grandpa is actively tilling — draw at the tilling position
             var worldPos = TillingWorldPosition.Value;
             screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos) + DrawShakeOffset;
             layerDepth = Math.Max(0.0001f, (worldPos.Y + 32f) / 10000f);
-            // Face right while moving/tilling (DrawShakeOffset.X < 0 means recoiling left)
             flip = DrawShakeOffset.X < -0.5f;
         }
         else
         {
             // Normal orbiting mode.
-            // Orbit is computed directly in screen space so it looks like a true circle
-            // regardless of the game's isometric projection.
             Farmer player = Game1.player;
             Vector2 playerWorld = player.getStandingPosition();
             Vector2 playerScreen = Game1.GlobalToLocal(Game1.viewport, playerWorld);
 
             screenPos = playerScreen + new Vector2(
-                (float)Math.Cos(angle) * OrbitRadius,
-                (float)Math.Sin(angle) * OrbitRadius);
+                (float)Math.Cos(angle) * _orbitRadius,
+                (float)Math.Sin(angle) * _orbitRadius + OrbitYShift);
 
             // Approximate world Y for layer depth: convert screen offset back
-            float worldY = playerWorld.Y + (float)Math.Sin(angle) * OrbitRadius;
+            float worldY = playerWorld.Y + (float)Math.Sin(angle) * _orbitRadius + OrbitYShift;
             layerDepth = Math.Max(0.0001f, (worldY + 32f) / 10000f);
             flip = Math.Cos(angle) < 0;
         }

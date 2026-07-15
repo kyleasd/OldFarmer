@@ -6,11 +6,7 @@ namespace OldFarmer;
 
 /// <summary>
 /// Self-contained module that drives grandpa's combat behaviour.
-///
-/// When enabled (monsters nearby):
-///   1. Ticks <see cref="GrandpaFighterBehavior"/> every game update.
-///   2. Feeds the combat position / shake back into <see cref="GrandpaSpiritOrbiter"/>.
-///   3. The orbiter tints grandpa red while <see cref="IsEnabled"/> is active.
+/// Supports multiple grandpas — each gets its own behavior instance.
 ///
 /// Unlike tool-based modules, combat is triggered reactively by
 /// <see cref="MonsterScanner.HasMonstersNearby"/> — not by the player's held tool.
@@ -18,18 +14,32 @@ namespace OldFarmer;
 /// </summary>
 internal sealed class CombatModule
 {
-    private readonly GrandpaFighterBehavior _fighter;
-    private readonly GrandpaSpiritOrbiter    _orbiter;
+    private readonly List<(GrandpaFighterBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
+    private readonly SharedTargetManager _targetMgr = new();
+    private IMonitor? _monitor;
 
-    public CombatModule(GrandpaSpiritOrbiter orbiter)
+    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
+
+    public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
     {
-        _orbiter = orbiter;
-        _fighter = new GrandpaFighterBehavior();
+        var behavior = new GrandpaFighterBehavior();
+        if (_monitor != null)
+            behavior.SetMonitor(_monitor);
+        behavior.SetTargetManager(_targetMgr);
+        _entries.Add((behavior, orbiter));
     }
 
-    public void SetMonitor(IMonitor monitor)
+    public void RemoveAllGrandpas()
     {
-        _fighter.SetMonitor(monitor);
+        foreach (var (behavior, orbiter) in _entries)
+        {
+            behavior.Reset();
+            orbiter.CombatWorldPosition = null;
+            orbiter.IsInCombatMode      = false;
+            orbiter.DrawShakeOffset     = Vector2.Zero;
+        }
+        _entries.Clear();
+        _targetMgr.Clear();
     }
 
     // ── public API ────────────────────────────────────────────────
@@ -41,10 +51,14 @@ internal sealed class CombatModule
     public void Disable()
     {
         IsEnabled = false;
-        _fighter.Reset();
-        _orbiter.CombatWorldPosition = null;
-        _orbiter.IsInCombatMode      = false;
-        _orbiter.DrawShakeOffset     = Vector2.Zero;
+        foreach (var (behavior, orbiter) in _entries)
+        {
+            behavior.Reset();
+            orbiter.CombatWorldPosition = null;
+            orbiter.IsInCombatMode      = false;
+            orbiter.DrawShakeOffset     = Vector2.Zero;
+        }
+        _targetMgr.Clear();
     }
 
     // ── game loop hooks ───────────────────────────────────────────
@@ -53,27 +67,32 @@ internal sealed class CombatModule
     {
         if (!IsEnabled) return;
 
-        // Grandpa is red whenever the combat module is enabled (monsters nearby),
-        // even while orbiting — this gives the player a visual warning.
-        _orbiter.IsInCombatMode = true;
-
-        _fighter.Update();
-
-        if (_fighter.IsFighting)
+        foreach (var (behavior, orbiter) in _entries)
         {
-            _orbiter.CombatWorldPosition = _fighter.WorldPosition;
-            _orbiter.DrawShakeOffset     = _fighter.DrawShakeOffset;
-        }
-        else
-        {
-            _orbiter.CombatWorldPosition = null;
-            _orbiter.DrawShakeOffset     = Vector2.Zero;
+            // Grandpa is red whenever the combat module is enabled (monsters nearby),
+            // even while orbiting — this gives the player a visual warning.
+            orbiter.IsInCombatMode = true;
+
+            if (orbiter.IsFadingOut() || orbiter.IsDestroyed)
+                continue;
+
+            behavior.Update();
+
+            if (behavior.IsFighting)
+            {
+                orbiter.CombatWorldPosition = behavior.WorldPosition;
+                orbiter.DrawShakeOffset     = behavior.DrawShakeOffset;
+            }
+            else
+            {
+                orbiter.CombatWorldPosition = null;
+                orbiter.DrawShakeOffset     = Vector2.Zero;
+            }
         }
     }
 
     public void Draw(SpriteBatch spriteBatch)
     {
         // Combat has no extra sprite overlay — grandpa himself is the weapon.
-        // The red tint is handled by the orbiter via IsInCombatMode.
     }
 }

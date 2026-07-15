@@ -51,10 +51,11 @@ internal sealed class GrandpaTillerBehavior
     private bool isCharging;
     private Vector2 chargeCenterTile;
 
-    /// <summary>Queue of center points grandpa will move to and till 9x9 around.
-    /// We only queue points that have at least one untilled tile nearby.
-    /// </summary>
-    private Queue<Vector2> centerQueue = new();
+    // Shared claim manager — prevents multiple grandpas from
+    // picking the same center tile at the same time.
+    private SharedTargetManager? _targetMgr;
+    private Vector2? _lastClaimedCenter;
+
     private Vector2 targetTile;       // center tile for the current pass
     private Vector2 targetWorldPos;   // pixel center of targetTile
 
@@ -82,6 +83,28 @@ internal sealed class GrandpaTillerBehavior
 
     public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
+    /// <summary>
+    /// Inject the shared claimed-centers set so this grandpa can avoid
+    /// picking the same target as other grandpas.
+    /// </summary>
+    public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
+
+    private void ClaimCenter(Vector2 center)
+    {
+        ReleaseClaim();
+        _lastClaimedCenter = center;
+        _targetMgr?.TryClaim(center);
+    }
+
+    private void ReleaseClaim()
+    {
+        if (_targetMgr != null && _lastClaimedCenter.HasValue)
+        {
+            _targetMgr.Release(_lastClaimedCenter.Value);
+            _lastClaimedCenter = null;
+        }
+    }
+
     // ── public control ────────────────────────────────────────────
     /// <summary>
     /// Force-reset the entire state machine back to Orbiting.
@@ -90,8 +113,8 @@ internal sealed class GrandpaTillerBehavior
     /// </summary>
     public void Reset()
     {
+        ReleaseClaim();
         currentState  = State.Orbiting;
-        centerQueue?.Clear();
         DrawShakeOffset = Vector2.Zero;
         isCharging      = false;
         currentStage    = 0;
@@ -180,31 +203,8 @@ internal sealed class GrandpaTillerBehavior
     {
         DrawShakeOffset = Vector2.Zero;
 
-        var untilled = TileScanner.GetUntilledTiles(loc, player);
-        if (untilled.Count == 0)
-            return;
-
-        // Build a sparse set of 9x9 center points that cover all untilled tiles.
-        // We step through the scan area in 9-tile strides so each center covers a
-        // non-overlapping 9x9 block, then keep only centers with at least one
-        // untilled tile in their block.
-        var centers = BuildCenterPoints(player.Tile, untilled);
-        if (centers.Count == 0)
-            return;
-
-        // Sort nearest-first
-        var playerPos = player.getStandingPosition();
-        centers.Sort((a, b) =>
-            Vector2.Distance(TileCenter(a), playerPos)
-                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
-
-        centerQueue = new Queue<Vector2>(centers);
-        targetTile    = centerQueue.Dequeue();
-        targetWorldPos = TileCenter(targetTile);
-
-        // WorldPosition is already synced to the orbit position
-        // by the Update() prologue when transitioning from Orbiting.
-        TransitionTo(State.MovingToTarget);
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
     }
 
     private void TickMovingToTarget()
@@ -265,22 +265,46 @@ internal sealed class GrandpaTillerBehavior
 
     private void TickNextTarget(GameLocation loc, Farmer player)
     {
-        // Try the next center in the queue
-        while (centerQueue.Count > 0)
-        {
-            var candidate = centerQueue.Dequeue();
-            // Only go there if the 9x9 block around it still has untilled tiles
-            if (HasUntilledInBlock(loc, candidate))
-            {
-                targetTile    = candidate;
-                targetWorldPos = TileCenter(targetTile);
-                TransitionTo(State.MovingToTarget);
-                return;
-            }
-        }
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
+        else
+            TransitionTo(State.Orbiting);
+    }
 
-        // All centers exhausted — go back to orbiting; will re-scan next tick
-        TransitionTo(State.Orbiting);
+    /// <summary>
+    /// Scans for untilled tiles, builds 9×9 center points, filters out
+    /// centers claimed by other grandpas, and picks the nearest one.
+    /// Returns false if no valid target is available.
+    /// </summary>
+    private bool TryPickNextTarget(GameLocation loc, Farmer player)
+    {
+        var untilled = TileScanner.GetUntilledTiles(loc, player);
+        if (untilled.Count == 0)
+            return false;
+
+        var centers = BuildCenterPoints(player.Tile, untilled);
+
+        // Exclude centers claimed by other grandpas so we spread out
+        if (_targetMgr != null)
+            centers.RemoveAll(c => _targetMgr.IsClaimed(c));
+
+        // Keep only centers whose 9×9 block still has untilled tiles
+        centers.RemoveAll(c => !HasUntilledInBlock(loc, c));
+
+        if (centers.Count == 0)
+            return false;
+
+        // Sort nearest-first
+        var playerPos = player.getStandingPosition();
+        centers.Sort((a, b) =>
+            Vector2.Distance(TileCenter(a), playerPos)
+                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
+
+        targetTile     = centers[0];
+        targetWorldPos = TileCenter(targetTile);
+        ClaimCenter(targetTile);
+
+        return true;
     }
 
     // ── helpers ───────────────────────────────────────────────────
@@ -360,8 +384,7 @@ internal sealed class GrandpaTillerBehavior
         // On enter: set up new state
         if (next == State.Orbiting)
         {
-            // Clear work queues so we don't re-pick a far-away target
-            centerQueue?.Clear();
+            ReleaseClaim();
         }
         else if (next == State.ChargingHoe)
         {

@@ -46,8 +46,10 @@ internal sealed class GrandpaPlanterBehavior
     /// <summary>True while grandpa is actively planting.</summary>
     public bool IsPlanting => currentState != State.Orbiting;
 
-    // Queue of center points
-    private Queue<Vector2> centerQueue = new();
+    private SharedTargetManager? _targetMgr;
+    private Vector2? _lastClaimedCenter;
+
+    // Queue of center points — replaced by TryPickNextTarget + SharedTargetManager
     private Vector2 targetTile;
     private Vector2 targetWorldPos;
     private int plantingTick;
@@ -58,15 +60,33 @@ internal sealed class GrandpaPlanterBehavior
         _monitor = monitor;
     }
 
+    public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
+
+    private void ClaimCenter(Vector2 center)
+    {
+        ReleaseClaim();
+        _lastClaimedCenter = center;
+        _targetMgr?.TryClaim(center);
+    }
+
+    private void ReleaseClaim()
+    {
+        if (_targetMgr != null && _lastClaimedCenter.HasValue)
+        {
+            _targetMgr.Release(_lastClaimedCenter.Value);
+            _lastClaimedCenter = null;
+        }
+    }
+
     // ── public control ────────────────────────────────────────────
     /// <summary>
     /// Force-reset the entire state machine back to Orbiting.
     /// </summary>
     public void Reset()
     {
+        ReleaseClaim();
         var prev = currentState;
         currentState   = State.Orbiting;
-        centerQueue?.Clear();
         DrawShakeOffset = Vector2.Zero;
         plantingTick   = 0;
         cooldownTick   = 0;
@@ -140,31 +160,11 @@ internal sealed class GrandpaPlanterBehavior
     {
         DrawShakeOffset = Vector2.Zero;
 
-        // Check if player is holding seeds
         if (!IsHoldingSeeds(player))
             return;
 
-        var plantable = PlantingScanner.GetPlantableTiles(loc, player);
-        _monitor?.Log($"[Planter] TickOrbiting: plantable tiles = {plantable.Count}", LogLevel.Trace);
-        if (plantable.Count == 0)
-            return;
-
-        var centers = BuildCenterPoints(player.Tile, plantable);
-        _monitor?.Log($"[Planter] TickOrbiting: center blocks = {centers.Count}", LogLevel.Trace);
-        if (centers.Count == 0)
-            return;
-
-        var playerPos = player.getStandingPosition();
-        centers.Sort((a, b) =>
-            Vector2.Distance(TileCenter(a), playerPos)
-                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
-
-        centerQueue = new Queue<Vector2>(centers);
-        targetTile    = centerQueue.Dequeue();
-        targetWorldPos = TileCenter(targetTile);
-        _monitor?.Log($"[Planter] First target: ({targetTile.X},{targetTile.Y})", LogLevel.Debug);
-
-        TransitionTo(State.MovingToTarget);
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
     }
 
     private void TickMovingToTarget()
@@ -231,7 +231,6 @@ internal sealed class GrandpaPlanterBehavior
 
     private void TickNextTarget(GameLocation loc, Farmer player)
     {
-        // If player no longer holds seeds, stop
         if (!IsHoldingSeeds(player))
         {
             _monitor?.Log("[Planter] Player no longer holding seeds, back to Orbiting", LogLevel.Debug);
@@ -239,21 +238,38 @@ internal sealed class GrandpaPlanterBehavior
             return;
         }
 
-        while (centerQueue.Count > 0)
-        {
-            var candidate = centerQueue.Dequeue();
-            if (PlantingScanner.HasPlantableInBlock(loc, candidate))
-            {
-                targetTile    = candidate;
-                targetWorldPos = TileCenter(targetTile);
-                _monitor?.Log($"[Planter] Next target: ({targetTile.X},{targetTile.Y})", LogLevel.Debug);
-                TransitionTo(State.MovingToTarget);
-                return;
-            }
-        }
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
+        else
+            TransitionTo(State.Orbiting);
+    }
 
-        _monitor?.Log("[Planter] No more targets, back to Orbiting", LogLevel.Debug);
-        TransitionTo(State.Orbiting);
+    private bool TryPickNextTarget(GameLocation loc, Farmer player)
+    {
+        var plantable = PlantingScanner.GetPlantableTiles(loc, player);
+        if (plantable.Count == 0)
+            return false;
+
+        var centers = BuildCenterPoints(player.Tile, plantable);
+
+        if (_targetMgr != null)
+            centers.RemoveAll(c => _targetMgr.IsClaimed(c));
+
+        centers.RemoveAll(c => !PlantingScanner.HasPlantableInBlock(loc, c));
+
+        if (centers.Count == 0)
+            return false;
+
+        var playerPos = player.getStandingPosition();
+        centers.Sort((a, b) =>
+            Vector2.Distance(TileCenter(a), playerPos)
+                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
+
+        targetTile     = centers[0];
+        targetWorldPos = TileCenter(targetTile);
+        ClaimCenter(targetTile);
+
+        return true;
     }
 
     // ── helpers ───────────────────────────────────────────────────
@@ -321,7 +337,7 @@ internal sealed class GrandpaPlanterBehavior
 
         // On enter Orbiting: clear work queue
         if (next == State.Orbiting)
-            centerQueue?.Clear();
+            ReleaseClaim();
 
         if (next == State.PlantingTile)
             plantingTick = 0;

@@ -44,7 +44,9 @@ internal sealed class GrandpaScytherBehavior
     private State _state = State.Orbiting;
     private bool  _wasOnFarm;
 
-    private Queue<Vector2> _centerQueue = new();
+    private SharedTargetManager? _targetMgr;
+    private Vector2? _lastClaimedCenter;
+
     private Vector2 _targetTile;
     private Vector2 _targetWorldPos;
     private int _chargeTick;
@@ -74,6 +76,24 @@ internal sealed class GrandpaScytherBehavior
 
     public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
+    public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
+
+    private void ClaimCenter(Vector2 center)
+    {
+        ReleaseClaim();
+        _lastClaimedCenter = center;
+        _targetMgr?.TryClaim(center);
+    }
+
+    private void ReleaseClaim()
+    {
+        if (_targetMgr != null && _lastClaimedCenter.HasValue)
+        {
+            _targetMgr.Release(_lastClaimedCenter.Value);
+            _lastClaimedCenter = null;
+        }
+    }
+
     // ── public control ────────────────────────────────────────────
     /// <summary>
     /// Force-reset the entire state machine back to Orbiting.
@@ -82,8 +102,8 @@ internal sealed class GrandpaScytherBehavior
     /// </summary>
     public void Reset()
     {
+        ReleaseClaim();
         _state         = State.Orbiting;
-        _centerQueue?.Clear();
         DrawShakeOffset = Vector2.Zero;
         _chargeTick    = 0;
         _cooldownTick  = 0;
@@ -165,25 +185,8 @@ internal sealed class GrandpaScytherBehavior
     {
         DrawShakeOffset = Vector2.Zero;
 
-        var targets = ScythingScanner.GetAllScytheTargets(loc, player);
-        if (targets.Count == 0)
-            return;
-
-        var centers = BuildCenterPoints(targets);
-        if (centers.Count == 0)
-            return;
-
-        // Sort nearest-first
-        var playerPos = player.getStandingPosition();
-        centers.Sort((a, b) =>
-            Vector2.Distance(TileCenter(a), playerPos)
-                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
-
-        _centerQueue  = new Queue<Vector2>(centers);
-        _targetTile   = _centerQueue.Dequeue();
-        _targetWorldPos = TileCenter(_targetTile);
-
-        TransitionTo(State.MovingToTarget);
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
     }
 
     private void TickMovingToTarget()
@@ -235,19 +238,38 @@ internal sealed class GrandpaScytherBehavior
 
     private void TickNextTarget(GameLocation loc, Farmer player)
     {
-        while (_centerQueue.Count > 0)
-        {
-            var candidate = _centerQueue.Dequeue();
-            if (HasTargetInBlock(loc, candidate))
-            {
-                _targetTile    = candidate;
-                _targetWorldPos = TileCenter(candidate);
-                TransitionTo(State.MovingToTarget);
-                return;
-            }
-        }
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
+        else
+            TransitionTo(State.Orbiting);
+    }
 
-        TransitionTo(State.Orbiting);
+    private bool TryPickNextTarget(GameLocation loc, Farmer player)
+    {
+        var targets = ScythingScanner.GetAllScytheTargets(loc, player);
+        if (targets.Count == 0)
+            return false;
+
+        var centers = BuildCenterPoints(targets);
+
+        if (_targetMgr != null)
+            centers.RemoveAll(c => _targetMgr.IsClaimed(c));
+
+        centers.RemoveAll(c => !HasTargetInBlock(loc, c));
+
+        if (centers.Count == 0)
+            return false;
+
+        var playerPos = player.getStandingPosition();
+        centers.Sort((a, b) =>
+            Vector2.Distance(TileCenter(a), playerPos)
+                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
+
+        _targetTile     = centers[0];
+        _targetWorldPos = TileCenter(_targetTile);
+        ClaimCenter(_targetTile);
+
+        return true;
     }
 
     // ── helpers ───────────────────────────────────────────────────
@@ -267,7 +289,7 @@ internal sealed class GrandpaScytherBehavior
 
         // On enter Orbiting: clear work queue so we don't re-pick a far-away target
         if (next == State.Orbiting)
-            _centerQueue?.Clear();
+            ReleaseClaim();
 
         if (next == State.ChargingScythe)
             _chargeTick = 0;

@@ -57,8 +57,10 @@ internal sealed class GrandpaWatererBehavior
     public Vector2 PrepareCenterTile => prepareCenterTile;
     public int CurrentStage => currentStage;
 
-    // Queue of center points
-    private Queue<Vector2> centerQueue = new();
+    private SharedTargetManager? _targetMgr;
+    private Vector2? _lastClaimedCenter;
+
+    // Queue of center points — replaced by TryPickNextTarget + SharedTargetManager
     private Vector2 targetTile;
     private Vector2 targetWorldPos;
     private int prepareTick;
@@ -66,6 +68,24 @@ internal sealed class GrandpaWatererBehavior
     private int cooldownTick;
 
     public void SetMonitor(IMonitor monitor) => _monitor = monitor;
+
+    public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
+
+    private void ClaimCenter(Vector2 center)
+    {
+        ReleaseClaim();
+        _lastClaimedCenter = center;
+        _targetMgr?.TryClaim(center);
+    }
+
+    private void ReleaseClaim()
+    {
+        if (_targetMgr != null && _lastClaimedCenter.HasValue)
+        {
+            _targetMgr.Release(_lastClaimedCenter.Value);
+            _lastClaimedCenter = null;
+        }
+    }
 
     // ── public control ────────────────────────────────────────────
     /// <summary>
@@ -75,8 +95,8 @@ internal sealed class GrandpaWatererBehavior
     /// </summary>
     public void Reset()
     {
+        ReleaseClaim();
         currentState   = State.Orbiting;
-        centerQueue?.Clear();
         DrawShakeOffset = Vector2.Zero;
         isPreparing   = false;
         currentStage   = 0;
@@ -158,24 +178,8 @@ internal sealed class GrandpaWatererBehavior
     {
         DrawShakeOffset = Vector2.Zero;
 
-        var unwatered = TileScanner.GetUnwateredTiles(loc, player);
-        if (unwatered.Count == 0)
-            return;
-
-        var centers = BuildCenterPoints(player.Tile, unwatered);
-        if (centers.Count == 0)
-            return;
-
-        var playerPos = player.getStandingPosition();
-        centers.Sort((a, b) =>
-            Vector2.Distance(TileCenter(a), playerPos)
-                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
-
-        centerQueue = new Queue<Vector2>(centers);
-        targetTile    = centerQueue.Dequeue();
-        targetWorldPos = TileCenter(targetTile);
-
-        TransitionTo(State.MovingToTarget);
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
     }
 
     private void TickMovingToTarget()
@@ -239,19 +243,38 @@ internal sealed class GrandpaWatererBehavior
 
     private void TickNextTarget(GameLocation loc, Farmer player)
     {
-        while (centerQueue.Count > 0)
-        {
-            var candidate = centerQueue.Dequeue();
-            if (TileScanner.HasUnwateredInBlock(loc, candidate))
-            {
-                targetTile    = candidate;
-                targetWorldPos = TileCenter(targetTile);
-                TransitionTo(State.MovingToTarget);
-                return;
-            }
-        }
+        if (TryPickNextTarget(loc, player))
+            TransitionTo(State.MovingToTarget);
+        else
+            TransitionTo(State.Orbiting);
+    }
 
-        TransitionTo(State.Orbiting);
+    private bool TryPickNextTarget(GameLocation loc, Farmer player)
+    {
+        var unwatered = TileScanner.GetUnwateredTiles(loc, player);
+        if (unwatered.Count == 0)
+            return false;
+
+        var centers = BuildCenterPoints(player.Tile, unwatered);
+
+        if (_targetMgr != null)
+            centers.RemoveAll(c => _targetMgr.IsClaimed(c));
+
+        centers.RemoveAll(c => !TileScanner.HasUnwateredInBlock(loc, c));
+
+        if (centers.Count == 0)
+            return false;
+
+        var playerPos = player.getStandingPosition();
+        centers.Sort((a, b) =>
+            Vector2.Distance(TileCenter(a), playerPos)
+                .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
+
+        targetTile     = centers[0];
+        targetWorldPos = TileCenter(targetTile);
+        ClaimCenter(targetTile);
+
+        return true;
     }
 
     // ── helpers ───────────────────────────────────────────────────
@@ -303,7 +326,7 @@ internal sealed class GrandpaWatererBehavior
 
         // On enter Orbiting: clear work queue so we don't re-pick a far-away target
         if (next == State.Orbiting)
-            centerQueue?.Clear();
+            ReleaseClaim();
 
         if (next == State.Preparing)
         {

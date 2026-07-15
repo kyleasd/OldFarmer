@@ -6,31 +6,39 @@ namespace OldFarmer;
 
 /// <summary>
 /// Self-contained module that drives grandpa's scything behaviour.
-/// Mirrors <see cref="TillingModule"/>: grandpa moves to a 9×9 block center,
-/// charges with a shake, then instantly harvests the whole block.
-///
-/// When enabled:
-///   1. Ticks <see cref="GrandpaScytherBehavior"/> every game update.
-///   2. Feeds the position / shake back into <see cref="GrandpaSpiritOrbiter"/>.
-///   3. Draws a range highlight during the charge wind-up.
-///
-/// When disabled, grandpa resumes normal orbiting.
+/// Supports multiple grandpas — each gets its own behavior instance.
 /// </summary>
 internal sealed class ScythingModule
 {
-    private readonly GrandpaScytherBehavior _scyther;
-    private readonly GrandpaSpiritOrbiter   _orbiter;
-
-    public ScythingModule(GrandpaSpiritOrbiter orbiter)
-    {
-        _orbiter = orbiter;
-        _scyther = new GrandpaScytherBehavior();
-    }
+    private readonly List<(GrandpaScytherBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
+    private readonly SharedTargetManager _targetMgr = new();
+    private IMonitor? _monitor;
 
     public void SetMonitor(IMonitor monitor)
     {
-        _scyther.SetMonitor(monitor);
+        _monitor = monitor;
         ScythingExecutor.SetMonitor(monitor);
+    }
+
+    public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
+    {
+        var behavior = new GrandpaScytherBehavior();
+        behavior.SetTargetManager(_targetMgr);
+        if (_monitor != null)
+            behavior.SetMonitor(_monitor);
+        _entries.Add((behavior, orbiter));
+    }
+
+    public void RemoveAllGrandpas()
+    {
+        foreach (var (behavior, orbiter) in _entries)
+        {
+            behavior.Reset();
+            orbiter.ScythingWorldPosition = null;
+            orbiter.DrawShakeOffset       = Vector2.Zero;
+        }
+        _entries.Clear();
+        _targetMgr.Clear();
     }
 
     // ── public API ────────────────────────────────────────────────
@@ -42,9 +50,13 @@ internal sealed class ScythingModule
     public void Disable()
     {
         IsEnabled = false;
-        _scyther.Reset();
-        _orbiter.ScythingWorldPosition = null;
-        _orbiter.DrawShakeOffset       = Vector2.Zero;
+        foreach (var (behavior, orbiter) in _entries)
+        {
+            behavior.Reset();
+            orbiter.ScythingWorldPosition = null;
+            orbiter.DrawShakeOffset       = Vector2.Zero;
+        }
+        _targetMgr.Clear();
     }
 
     // ── game loop hooks ───────────────────────────────────────────
@@ -53,17 +65,23 @@ internal sealed class ScythingModule
     {
         if (!IsEnabled) return;
 
-        _scyther.Update();
+        foreach (var (behavior, orbiter) in _entries)
+        {
+            if (orbiter.IsFadingOut() || orbiter.IsDestroyed)
+                continue;
 
-        if (_scyther.IsScything)
-        {
-            _orbiter.ScythingWorldPosition = _scyther.WorldPosition;
-            _orbiter.DrawShakeOffset       = _scyther.DrawShakeOffset;
-        }
-        else
-        {
-            _orbiter.ScythingWorldPosition = null;
-            _orbiter.DrawShakeOffset       = Vector2.Zero;
+            behavior.Update();
+
+            if (behavior.IsScything)
+            {
+                orbiter.ScythingWorldPosition = behavior.WorldPosition;
+                orbiter.DrawShakeOffset       = behavior.DrawShakeOffset;
+            }
+            else
+            {
+                orbiter.ScythingWorldPosition = null;
+                orbiter.DrawShakeOffset       = Vector2.Zero;
+            }
         }
     }
 
@@ -71,8 +89,10 @@ internal sealed class ScythingModule
     {
         if (!IsEnabled) return;
 
-        // Draw the 9×9 range highlight during the charge wind-up
-        if (_scyther.IsCharging)
-            HighlightDrawer.Draw(spriteBatch, _scyther.ChargeCenterTile, _scyther.CurrentStage);
+        foreach (var (behavior, _) in _entries)
+        {
+            if (behavior.IsCharging)
+                HighlightDrawer.Draw(spriteBatch, behavior.ChargeCenterTile, behavior.CurrentStage);
+        }
     }
 }

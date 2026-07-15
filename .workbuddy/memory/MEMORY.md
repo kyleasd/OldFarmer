@@ -16,6 +16,29 @@
 - `ModEntry` 只持有 `TillingModule` + `WoodcuttingModule` + `WateringModule` + `ScythingModule` + `PlantingModule` + `CombatModule`，构造时默认均不激活。
 - 后续其他行为（挖矿/钓鱼/采集）应仿照此模式各建一个 `*Module` 类。
 
+### SharedTargetManager 通用认领机制（2026-07-15）
+- 所有支持多爷爷的模块统一使用 `SharedTargetManager` 防止多个爷爷抢占同一个目标。
+- **文件**: `SharedTargetManager.cs` — 封装 `TryClaim(Vector2)` / `Release` / `IsClaimed` / `Clear`。
+- **用法模板**（模块 + Behavior，9×9 中心点模式）：
+  1. Module: 声明 `private readonly SharedTargetManager _targetMgr = new()`
+  2. Module: `AddGrandpa(orbiter)` 中 `behavior.SetTargetManager(_targetMgr)`
+  3. Module: `RemoveAllGrandpas()`/`Disable()` 中 `_targetMgr.Clear()`
+  4. Behavior: 添加 `SetTargetManager`/`ClaimCenter`/`ReleaseClaim`/`TryPickNextTarget` 方法
+  5. Behavior: 移除 `centerQueue`，`TickOrbiting`/`TickNextTarget` 统一调用 `TryPickNextTarget`
+  6. Behavior: `Reset()` 和 `TransitionTo(Orbiting)` 中调 `ReleaseClaim()`
+- **已应用模块**: Tilling, Watering, Scything, Planting, Woodcutting
+- **新模块开发时**：必须引用 `SharedTargetManager`，不要把 `HashSet<Vector2>` 写在模块里。
+
+### 最新功能（2026-07-08）
+- **多爷爷召唤（Multi-Grandpa Summoning）**：
+  - 玩家可多次喝神秘糖浆召唤多个爷爷，上限 10 个，共用同一条 SAN 条。
+  - `GrandpaSpiritOrbiter` 移除了 `static Instance` 单例模式，改为多实例。新增 `angleOffset` 构造参数，10 个爷爷按 `count * 2π/10` 在轨道均匀分布。
+  - 所有 6 个 Module 从单 `(behavior, orbiter)` 改为 `List<(behavior, orbiter)>` 模式，新增 `AddGrandpa(orbiter)` / `RemoveAllGrandpas()` 方法。
+  - `ModEntry` 持有 `List<GrandpaSpiritOrbiter> _grandpas`，`SummonGrandpa()` 每次创建新 orbiter 并注册到所有模块。
+  - SAN 归零时所有 orbiter 同时淡出；全部销毁后清空列表和模块。
+  - 模块 `Update()` 跳过 `IsFadingOut() || IsDestroyed` 的 orbiter。
+  - 模块构造函数不再需要 orbiter 参数（PlantingModule 仍需 IMonitor）。
+
 ### 最新功能（2026-07-04）
 - **战斗模块（CombatModule）**：
   - 玩家周围 10 格内有怪物时，爷爷自动变红并前往攻击。

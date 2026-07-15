@@ -10,7 +10,14 @@ namespace OldFarmer;
 /// <summary>The mod entry point.</summary>
 internal sealed class ModEntry : Mod
 {
-    private readonly GrandpaSpiritOrbiter grandpaSpirit = new();
+    /// <summary>Maximum number of grandpas that can be summoned simultaneously.</summary>
+    private const int MaxGrandpas = 10;
+
+    // Orbit parameters — must match GrandpaSpiritOrbiter's constants
+    private const float BaseOrbitRadius = 200f;
+    private const float OrbitRadiusStep = 56f;
+
+    private readonly List<GrandpaSpiritOrbiter> _grandpas = new();
 
     private readonly TillingModule tillingModule;
     private readonly WoodcuttingModule woodcuttingModule;
@@ -21,12 +28,12 @@ internal sealed class ModEntry : Mod
 
     public ModEntry()
     {
-        tillingModule    = new TillingModule(grandpaSpirit);
-        woodcuttingModule = new WoodcuttingModule(grandpaSpirit);
-        wateringModule   = new WateringModule(grandpaSpirit);
-        scythingModule   = new ScythingModule(grandpaSpirit);
-        plantingModule   = new PlantingModule(grandpaSpirit, Monitor);
-        combatModule     = new CombatModule(grandpaSpirit);
+        tillingModule    = new TillingModule();
+        woodcuttingModule = new WoodcuttingModule();
+        wateringModule   = new WateringModule();
+        scythingModule   = new ScythingModule();
+        plantingModule   = new PlantingModule(Monitor);
+        combatModule     = new CombatModule();
 
         // Modules start disabled; ModEntry.OnUpdateTicked enables them
         // dynamically based on the player's currently equipped tool/item.
@@ -85,27 +92,37 @@ internal sealed class ModEntry : Mod
         if (!Game1.game1.IsActive)
             return;
 
-        grandpaSpirit.Update();
+        // Update all active grandpa orbiters
+        foreach (var g in _grandpas)
+            g.Update();
 
-        // Check if SAN dropped to 0 — trigger fade-out
+        // Remove fully destroyed orbiters (fade-out complete)
+        _grandpas.RemoveAll(g => g.IsDestroyed);
+
+        // Check if SAN dropped to 0 — trigger fade-out on ALL grandpas
         if (Game1.player != null && SanManager.GetSan(Game1.player) <= 0)
         {
-            if (!grandpaSpirit.IsDestroyed && !grandpaSpirit.IsFadingOut())
+            bool anyAlive = false;
+            foreach (var g in _grandpas)
             {
-                grandpaSpirit.StartFadeOut();
-                SanBarDrawer.ShouldDraw = false; // Hide SAN bar
-
-                // Show HUD message when grandpa starts fading out
+                if (!g.IsDestroyed && !g.IsFadingOut())
+                {
+                    g.StartFadeOut();
+                    anyAlive = true;
+                }
+            }
+            if (anyAlive)
+            {
+                SanBarDrawer.ShouldDraw = false;
                 Game1.addHUDMessage(new HUDMessage(
-                    "爷爷的灵力耗尽了...",
+                    "爷爷们的灵力耗尽了...",
                     3)); // type 3 = red warning
             }
         }
 
-        // If grandpa is fully destroyed (fade-out complete), stop everything
-        if (grandpaSpirit.IsDestroyed)
+        // If all grandpas are gone, stop everything
+        if (_grandpas.Count == 0)
         {
-            // Disable all modules
             tillingModule.Disable();
             wateringModule.Disable();
             woodcuttingModule.Disable();
@@ -116,7 +133,7 @@ internal sealed class ModEntry : Mod
         }
 
         // ── Combat takes priority over all other activities ──────
-        // When monsters are within 10 tiles, grandpa enters combat mode
+        // When monsters are within 10 tiles, all grandpas enter combat mode
         // and other modules are paused.
         bool monstersNearby = Game1.player != null
             && Game1.currentLocation != null
@@ -193,7 +210,10 @@ internal sealed class ModEntry : Mod
 
     private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
     {
-        grandpaSpirit.Draw(e.SpriteBatch);
+        // Draw all grandpa orbiters
+        foreach (var g in _grandpas)
+            g.Draw(e.SpriteBatch);
+
         tillingModule.Draw(e.SpriteBatch);
         wateringModule.Draw(e.SpriteBatch);
         woodcuttingModule.Draw(e.SpriteBatch);
@@ -209,13 +229,23 @@ internal sealed class ModEntry : Mod
     }
 
     /// <summary>
-    /// When the player goes to sleep, grandpa leaves for the night.
-    /// The player must summon grandpa again the next day with Mystic Syrup.
+    /// When the player goes to sleep, all grandpas leave for the night.
+    /// The player must summon grandpa(s) again the next day with Mystic Syrup.
     /// </summary>
     private void OnDayEnding(object? sender, DayEndingEventArgs e)
     {
-        if (grandpaSpirit.IsDestroyed)
-            return;
+        // Dismiss all grandpas
+        foreach (var g in _grandpas)
+            g.Dismiss();
+        _grandpas.Clear();
+
+        // Clear all module grandpa entries
+        tillingModule.RemoveAllGrandpas();
+        wateringModule.RemoveAllGrandpas();
+        woodcuttingModule.RemoveAllGrandpas();
+        scythingModule.RemoveAllGrandpas();
+        plantingModule.RemoveAllGrandpas();
+        combatModule.RemoveAllGrandpas();
 
         // Disable all modules
         tillingModule.Disable();
@@ -225,14 +255,13 @@ internal sealed class ModEntry : Mod
         plantingModule.Disable();
         combatModule.Disable();
 
-        // Grandpa leaves — no fade-out animation needed (screen is already fading to black)
-        grandpaSpirit.Dismiss();
         SanBarDrawer.ShouldDraw = false;
     }
 
     /// <summary>
-    /// Restores SAN to full and re-creates the grandpa spirit if it was destroyed.
-    /// Plays a summoning effect.
+    /// Summons a new grandpa spirit (or restores SAN if already at max capacity).
+    /// Each call adds one additional grandpa, up to <see cref="MaxGrandpas"/>.
+    /// All grandpas share the same SAN bar.
     /// </summary>
     private void SummonGrandpa()
     {
@@ -242,9 +271,39 @@ internal sealed class ModEntry : Mod
         // Restore SAN to maximum (dynamically calculated from player skills)
         SanManager.SetSan(Game1.player, SanManager.GetMaxSan(Game1.player));
 
-        // Revive the spirit if it was destroyed
-        if (grandpaSpirit.IsDestroyed)
-            grandpaSpirit.Revive();
+        // Add a new grandpa if under the cap
+        if (_grandpas.Count < MaxGrandpas)
+        {
+            // Spread grandpas evenly around the orbit circle,
+            // each on a different concentric ring so they don't overlap
+            float angleOffset = _grandpas.Count * (MathF.PI * 2f / MaxGrandpas);
+            float orbitRadius = BaseOrbitRadius + _grandpas.Count * OrbitRadiusStep;
+            var orbiter = new GrandpaSpiritOrbiter(angleOffset, orbitRadius);
+            orbiter.Revive();
+            _grandpas.Add(orbiter);
+
+            // Register with all modules
+            tillingModule.AddGrandpa(orbiter);
+            wateringModule.AddGrandpa(orbiter);
+            woodcuttingModule.AddGrandpa(orbiter);
+            scythingModule.AddGrandpa(orbiter);
+            plantingModule.AddGrandpa(orbiter);
+            combatModule.AddGrandpa(orbiter);
+
+            int count = _grandpas.Count;
+            string msg = count switch
+            {
+                1 => "爷爷听到了你的呼唤，回来了！",
+                _ => $"又一位爷爷回来了！现在共有 {count} 位爷爷守护着你。",
+            };
+            Game1.addHUDMessage(new HUDMessage(msg, 2));
+        }
+        else
+        {
+            Game1.addHUDMessage(new HUDMessage(
+                $"爷爷们已经到齐了！({MaxGrandpas} 位爷爷正守护着你)",
+                2));
+        }
 
         // Make sure SAN bar is visible
         SanBarDrawer.ShouldDraw = true;
@@ -252,11 +311,6 @@ internal sealed class ModEntry : Mod
         // Summoning visual & sound effects
         Game1.currentLocation?.playSound("yoba");
         Game1.flashAlpha = 0.5f;
-
-        // Show a confirmation message
-        Game1.addHUDMessage(new HUDMessage(
-            "爷爷听到了你的呼唤，回来了！",
-            2));
     }
 
     private static bool IsHoldingSeeds()
@@ -303,7 +357,7 @@ internal sealed class ModEntry : Mod
     /// </summary>
     private void UpdateOutOfSeasonBubble()
     {
-        if (grandpaSpirit.IsDestroyed)
+        if (_grandpas.Count == 0)
             return;
 
         bool holdingBadSeeds = IsHoldingOutOfSeasonSeeds();

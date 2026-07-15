@@ -51,6 +51,10 @@ internal sealed class GrandpaFighterBehavior
     private int _hitTick;
     private IMonitor? _monitor;
 
+    // Shared claim manager — prefer unclaimed monsters, but will join claimed ones if needed
+    private SharedTargetManager? _targetMgr;
+    private Vector2? _claimedMonsterTile;
+
     // Strafing: random cardinal position around the monster
     private Vector2 _strafeTarget;
     private static readonly Random _rng = new();
@@ -68,6 +72,8 @@ internal sealed class GrandpaFighterBehavior
 
     public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
+    public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
+
     // ── public control ────────────────────────────────────────────
 
     /// <summary>
@@ -76,6 +82,7 @@ internal sealed class GrandpaFighterBehavior
     /// </summary>
     public void Reset()
     {
+        ReleaseClaim();
         _state       = State.Orbiting;
         _target      = null;
         _attackTick  = 0;
@@ -143,7 +150,13 @@ internal sealed class GrandpaFighterBehavior
         if (monsters.Count == 0)
             return;
 
-        _target = monsters[0]; // nearest
+        // Prefer an unclaimed monster (spread out), but fall back to claimed ones (focus fire)
+        var picked = PickBestTarget(monsters);
+        if (picked is null)
+            return;
+
+        _target = picked;
+        ClaimTarget(picked);
         TransitionTo(State.MovingToTarget);
     }
 
@@ -242,18 +255,24 @@ internal sealed class GrandpaFighterBehavior
 
     private void TickNextTarget(GameLocation loc, Farmer player)
     {
+        ReleaseClaim();
+
         var monsters = MonsterScanner.GetNearbyMonsters(loc, player);
         if (monsters.Count > 0)
         {
-            _target = monsters[0];
-            _attackTick = 0;
-            _hitTick    = AttackCooldownTicks;
-            TransitionTo(State.MovingToTarget);
+            var picked = PickBestTarget(monsters);
+            if (picked != null)
+            {
+                _target = picked;
+                ClaimTarget(picked);
+                _attackTick = 0;
+                _hitTick    = AttackCooldownTicks;
+                TransitionTo(State.MovingToTarget);
+                return;
+            }
         }
-        else
-        {
-            TransitionTo(State.Orbiting);
-        }
+
+        TransitionTo(State.Orbiting);
     }
 
     // ── combat ────────────────────────────────────────────────────
@@ -320,6 +339,7 @@ internal sealed class GrandpaFighterBehavior
 
         if (next == State.Orbiting)
         {
+            ReleaseClaim();
             _target = null;
             DrawShakeOffset = Vector2.Zero;
         }
@@ -350,5 +370,45 @@ internal sealed class GrandpaFighterBehavior
         WorldPosition = dist <= speed
             ? target
             : WorldPosition + Vector2.Normalize(dir) * speed;
+    }
+
+    // ── shared target claiming (soft strategy: prefer unclaimed, fall back to claimed) ──
+
+    /// <summary>
+    /// Picks the best monster from the list.
+    /// Strategy: prefer unclaimed monsters first (spread out), then fall back to
+    /// any monster (focus fire). The list is already sorted nearest-first by the scanner.
+    /// </summary>
+    private Monster? PickBestTarget(List<Monster> monsters)
+    {
+        if (_targetMgr is null)
+            return monsters[0]; // no sharing — just pick nearest
+
+        // First pass: try unclaimed
+        foreach (var m in monsters)
+        {
+            if (!_targetMgr.IsClaimed(m.Tile))
+                return m;
+        }
+
+        // All monsters claimed — join the fight on the nearest
+        return monsters[0];
+    }
+
+    private void ClaimTarget(Monster monster)
+    {
+        if (_targetMgr is null) return;
+        ReleaseClaim();
+        _claimedMonsterTile = monster.Tile;
+        _targetMgr.TryClaim(monster.Tile);
+    }
+
+    private void ReleaseClaim()
+    {
+        if (_targetMgr != null && _claimedMonsterTile.HasValue)
+        {
+            _targetMgr.Release(_claimedMonsterTile.Value);
+            _claimedMonsterTile = null;
+        }
     }
 }

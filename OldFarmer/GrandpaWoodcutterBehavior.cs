@@ -39,6 +39,9 @@ internal sealed class GrandpaWoodcutterBehavior
     private State _state = State.Orbiting;
     private bool _wasOnFarm;
 
+    private SharedTargetManager? _targetMgr;
+    private Vector2? _lastClaimedTile;
+
     private Queue<Vector2> _targetQueue = new();
     private Vector2 _targetTile;
     private Vector2 _targetWorldPos;
@@ -71,6 +74,24 @@ internal sealed class GrandpaWoodcutterBehavior
         _monitor = monitor;
     }
 
+    public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
+
+    private void ClaimTile(Vector2 tile)
+    {
+        ReleaseClaim();
+        _lastClaimedTile = tile;
+        _targetMgr?.TryClaim(tile);
+    }
+
+    private void ReleaseClaim()
+    {
+        if (_targetMgr != null && _lastClaimedTile.HasValue)
+        {
+            _targetMgr.Release(_lastClaimedTile.Value);
+            _lastClaimedTile = null;
+        }
+    }
+
     // ── public control ────────────────────────────────────────────
     /// <summary>
     /// Force-reset the entire state machine back to Orbiting.
@@ -79,8 +100,8 @@ internal sealed class GrandpaWoodcutterBehavior
     /// </summary>
     public void Reset()
     {
+        ReleaseClaim();
         _state        = State.Orbiting;
-        _targetQueue?.Clear();
         _chopTick     = 0;
         _cooldownTick = 0;
         // Sync WorldPosition so grandpa re-appears near the player
@@ -194,9 +215,21 @@ internal sealed class GrandpaWoodcutterBehavior
             Vector2.Distance(TileCenter(a), playerPos)
                 .CompareTo(Vector2.Distance(TileCenter(b), playerPos)));
 
-        _targetQueue = new Queue<Vector2>(targets);
-        _targetTile = _targetQueue.Dequeue();
+        // Filter out tiles claimed by other grandpas
+        if (_targetMgr != null)
+            targets.RemoveAll(t => _targetMgr.IsClaimed(t));
+
+        if (targets.Count == 0)
+            return;
+
+        _targetTile = targets[0];
+        ClaimTile(_targetTile);
         _targetWorldPos = TileCenter(_targetTile);
+
+        // Enqueue remaining unclaimed tiles for TickNextTarget
+        _targetQueue = new Queue<Vector2>();
+        for (int i = 1; i < targets.Count; i++)
+            _targetQueue.Enqueue(targets[i]);
 
         _monitor?.Log($"[Woodcutting] Transitioning Orbiting→MovingToX, target=({_targetTile.X:F0},{_targetTile.Y:F0})", LogLevel.Info);
         TransitionTo(State.MovingToX);
@@ -262,14 +295,20 @@ internal sealed class GrandpaWoodcutterBehavior
 
     private void TickNextTarget(GameLocation loc, Farmer player)
     {
-        // Try remaining targets in the queue; re-validate each one
+        // Release the previous tree's claim — chopping is done
+        ReleaseClaim();
+
+        // Try remaining targets in the queue; re-validate and skip claimed ones
         while (_targetQueue.Count > 0)
         {
             var candidate = _targetQueue.Dequeue();
+            if (_targetMgr != null && _targetMgr.IsClaimed(candidate))
+                continue;
             if (IsStillChoppable(loc, candidate))
             {
                 _targetTile = candidate;
                 _targetWorldPos = TileCenter(candidate);
+                ClaimTile(candidate);
                 TransitionTo(State.MovingToX);
                 return;
             }
@@ -291,7 +330,10 @@ internal sealed class GrandpaWoodcutterBehavior
 
         // On enter Orbiting: clear work queue so we don't re-pick a far-away target
         if (next == State.Orbiting)
+        {
+            ReleaseClaim();
             _targetQueue?.Clear();
+        }
     }
 
     /// <summary>

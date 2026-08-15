@@ -3,7 +3,6 @@ using StardewValley;
 using StardewValley.Enchantments;
 using StardewValley.Monsters;
 using StardewValley.Tools;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -51,7 +50,6 @@ internal sealed class GrandpaFighterBehavior
     private int _attackTick;
     private int _cooldownTick;
     private int _hitTick;
-    private IMonitor? _monitor;
 
     // Shared claim manager — prefer unclaimed monsters, but will join claimed ones if needed
     private SharedTargetManager? _targetMgr;
@@ -75,8 +73,6 @@ internal sealed class GrandpaFighterBehavior
 
     /// <summary>True while grandpa is actively fighting (not Orbiting). Used for red tint.</summary>
     public bool IsFighting => _state != State.Orbiting;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
 

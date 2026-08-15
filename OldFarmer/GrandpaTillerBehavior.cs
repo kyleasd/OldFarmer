@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -44,8 +43,6 @@ internal sealed class GrandpaTillerBehavior
     private State currentState = State.Orbiting;
     private bool wasOnFarm = false;
 
-    private IMonitor? _monitor;
-
     // Charging state exposed for highlight rendering
     private int currentStage;
     private bool isCharging;
@@ -80,8 +77,6 @@ internal sealed class GrandpaTillerBehavior
 
     /// <summary>Current charge stage (0=none, 1=3×3, 2=5×5, 3=7×7, 4=9×9).</summary>
     public int CurrentStage => currentStage;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     /// <summary>
     /// Inject the shared claimed-centers set so this grandpa can avoid

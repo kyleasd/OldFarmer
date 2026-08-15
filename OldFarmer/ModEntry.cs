@@ -32,7 +32,7 @@ internal sealed class ModEntry : Mod
         woodcuttingModule = new WoodcuttingModule();
         wateringModule   = new WateringModule();
         scythingModule   = new ScythingModule();
-        plantingModule   = new PlantingModule(Monitor);
+        plantingModule   = new PlantingModule();
         combatModule     = new CombatModule();
 
         // Modules start disabled; ModEntry.OnUpdateTicked enables them
@@ -43,18 +43,10 @@ internal sealed class ModEntry : Mod
     /// <param name="helper">Provides simplified APIs for writing mods.</param>
     public override void Entry(IModHelper helper)
     {
-        tillingModule.SetMonitor(Monitor);
-        wateringModule.SetMonitor(Monitor);
-        woodcuttingModule.SetMonitor(Monitor);
-        scythingModule.SetMonitor(Monitor);
-        combatModule.SetMonitor(Monitor);
-
         helper.Events.GameLoop.UpdateTicked  += OnUpdateTicked;
         helper.Events.GameLoop.DayEnding     += OnDayEnding;
         helper.Events.Display.RenderedWorld  += OnRenderedWorld;
         helper.Events.Display.RenderedHud    += OnRenderedHud;
-
-        PlantingExecutor.SetMonitor(Monitor);
     }
 
     private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)

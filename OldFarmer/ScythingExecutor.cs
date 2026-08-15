@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.TerrainFeatures;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -18,9 +17,6 @@ internal static class ScythingExecutor
 {
     /// <summary>Half-size of the scything square (9×9 → radius 4).</summary>
     private const int HarvestRadius = 4;
-
-    private static IMonitor? _monitor;
-    public static void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     /// <summary>
     /// Harvests all crops and grass in a 9×9 area centered on
@@ -51,13 +47,10 @@ internal static class ScythingExecutor
                     try
                     {
                         crop.harvest((int)tilePos.X, (int)tilePos.Y, dirt, null, false);
-                        _monitor?.Log(
-                            $"[Scything] Harvested crop at ({tilePos.X:F0},{tilePos.Y:F0})",
-                            LogLevel.Trace);
                     }
-                    catch (System.Exception ex)
+                    catch (System.Exception)
                     {
-                        _monitor?.Log($"[Scything] Error harvesting crop: {ex.Message}", LogLevel.Warn);
+                        // Ignore harvest failures on individual tiles
                     }
                     continue;
                 }
@@ -85,10 +78,6 @@ internal static class ScythingExecutor
                     }
 
                     try { Game1.playSound("cut"); } catch { }
-
-                    _monitor?.Log(
-                        $"[Scything] Cut grass at ({tilePos.X:F0},{tilePos.Y:F0}){(addedToSilo ? " (→silo)" : " (→ground)")}",
-                        LogLevel.Trace);
                 }
             }
         }

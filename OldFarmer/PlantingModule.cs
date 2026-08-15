@@ -1,7 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using StardewValley;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -13,19 +11,13 @@ internal sealed class PlantingModule
 {
     private readonly List<(GrandpaPlanterBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
     private readonly SharedTargetManager _targetMgr = new();
-    private readonly IMonitor _monitor;
     private bool _enabled;
 
     public bool IsEnabled => _enabled;
 
-    public PlantingModule(IMonitor monitor)
-    {
-        _monitor = monitor;
-    }
-
     public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
     {
-        var behavior = new GrandpaPlanterBehavior(_monitor);
+        var behavior = new GrandpaPlanterBehavior();
         behavior.SetTargetManager(_targetMgr);
         _entries.Add((behavior, orbiter));
     }

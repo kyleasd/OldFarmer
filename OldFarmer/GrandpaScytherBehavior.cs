@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.TerrainFeatures;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -52,8 +51,6 @@ internal sealed class GrandpaScytherBehavior
     private int _chargeTick;
     private int _cooldownTick;
 
-    private IMonitor? _monitor;
-
     // ── public output ─────────────────────────────────────────────
 
     /// <summary>Current world-pixel position of the grandpa sprite.</summary>
@@ -73,8 +70,6 @@ internal sealed class GrandpaScytherBehavior
 
     /// <summary>Current charge stage (always 4 = full 9×9).</summary>
     public int CurrentStage => _state == State.ChargingScythe ? 4 : 0;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
 
@@ -126,10 +121,7 @@ internal sealed class GrandpaScytherBehavior
         if (SanManager.GetSan(player) <= 0)
         {
             if (_state != State.Orbiting)
-            {
                 TransitionTo(State.Orbiting);
-                _monitor?.Log("[Scyther] SAN <= 0, stopping work", LogLevel.Info);
-            }
             return;
         }
 

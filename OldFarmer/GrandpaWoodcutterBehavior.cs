@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.TerrainFeatures;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -47,13 +46,10 @@ internal sealed class GrandpaWoodcutterBehavior
     private Vector2 _targetWorldPos;
     private int _cooldownTick;
     private int _chopTick;
-    private int _scanLogCooldown;
-    private bool _didFirstScanLog;
 
     // ── axe orbit ─────────────────────────────────────────────────
     private float _axeAngle;
     private Vector2 _axeWorldPos;
-    private IMonitor? _monitor;
 
     // ── public output ─────────────────────────────────────────────
 
@@ -68,11 +64,6 @@ internal sealed class GrandpaWoodcutterBehavior
 
     /// <summary>Current rotation angle of the axe (radians).</summary>
     public float AxeAngle => _axeAngle;
-
-    public void SetMonitor(IMonitor monitor)
-    {
-        _monitor = monitor;
-    }
 
     public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
 
@@ -123,10 +114,7 @@ internal sealed class GrandpaWoodcutterBehavior
         if (SanManager.GetSan(player) <= 0)
         {
             if (_state != State.Orbiting)
-            {
                 TransitionTo(State.Orbiting);
-                _monitor?.Log("[Woodcutter] SAN <= 0, stopping work", LogLevel.Info);
-            }
             return;
         }
 
@@ -145,10 +133,7 @@ internal sealed class GrandpaWoodcutterBehavior
         }
 
         if (!_wasOnFarm)
-        {
             _wasOnFarm = true;
-            _monitor?.Log($"[Woodcutting] Entered outdoor farm '{loc.Name}' — scanning for trees...", LogLevel.Info);
-        }
 
         // Leash check: too far from player → move back at variable speed
         if (_state != State.Orbiting)
@@ -197,15 +182,6 @@ internal sealed class GrandpaWoodcutterBehavior
 
         var targets = WoodcutterScanner.GetChoppableTiles(loc, player);
 
-        // Diagnostic: log scan results on first scan and every 120 ticks
-        _scanLogCooldown = (_scanLogCooldown + 1) % 120;
-        if (!_didFirstScanLog || _scanLogCooldown == 0)
-        {
-            _didFirstScanLog = true;
-            var (total, choppable) = WoodcutterScanner.CountTrees(loc, player);
-            _monitor?.Log($"[Woodcutting] Scan: {total} total trees, {choppable} choppable (stage≥5 or stump). Targets returned: {targets.Count}. PlayerTile=({player.Tile.X},{player.Tile.Y}) Loc='{loc.Name}'", LogLevel.Info);
-        }
-
         if (targets.Count == 0)
             return;
 
@@ -231,7 +207,6 @@ internal sealed class GrandpaWoodcutterBehavior
         for (int i = 1; i < targets.Count; i++)
             _targetQueue.Enqueue(targets[i]);
 
-        _monitor?.Log($"[Woodcutting] Transitioning Orbiting→MovingToX, target=({_targetTile.X:F0},{_targetTile.Y:F0})", LogLevel.Info);
         TransitionTo(State.MovingToX);
     }
 
@@ -257,7 +232,6 @@ internal sealed class GrandpaWoodcutterBehavior
         if (Math.Abs(dy) <= ArrivalThreshold)
         {
             WorldPosition = _targetWorldPos;
-            _monitor?.Log($"[Woodcutting] Arrived at target, MovingToY→Chopping", LogLevel.Info);
             TransitionTo(State.Chopping);
             return;
         }

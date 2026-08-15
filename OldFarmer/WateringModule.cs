@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -12,9 +11,6 @@ internal sealed class WateringModule
 {
     private readonly List<(GrandpaWatererBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
     private readonly SharedTargetManager _targetMgr = new();
-    private IMonitor? _monitor;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
     {

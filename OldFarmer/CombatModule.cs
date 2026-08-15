@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -16,15 +15,10 @@ internal sealed class CombatModule
 {
     private readonly List<(GrandpaFighterBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
     private readonly SharedTargetManager _targetMgr = new();
-    private IMonitor? _monitor;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
     {
         var behavior = new GrandpaFighterBehavior();
-        if (_monitor != null)
-            behavior.SetMonitor(_monitor);
         behavior.SetTargetManager(_targetMgr);
         _entries.Add((behavior, orbiter));
     }

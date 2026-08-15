@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -17,9 +16,6 @@ internal sealed class TillingModule
 {
     private readonly List<(GrandpaTillerBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
     private readonly SharedTargetManager _targetMgr = new();
-    private IMonitor? _monitor;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     /// <summary>
     /// Register a new grandpa. Creates a fresh behavior instance bound to

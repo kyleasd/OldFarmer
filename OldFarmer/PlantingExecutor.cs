@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.TerrainFeatures;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -12,13 +11,6 @@ namespace OldFarmer;
 /// </summary>
 internal static class PlantingExecutor
 {
-    private static IMonitor? _monitor;
-
-    public static void SetMonitor(IMonitor monitor)
-    {
-        _monitor = monitor;
-    }
-
     /// <summary>
     /// Plants seeds on a 9x9 area centered on <paramref name="centerTile"/>.
     /// Only affects HoeDirt tiles with no crop.
@@ -27,31 +19,21 @@ internal static class PlantingExecutor
     public static int PlantArea(GameLocation location, Farmer player, Vector2 centerTile, StardewValley.Object seedItem)
     {
         if (seedItem == null || seedItem.Stack <= 0)
-        {
-            _monitor?.Log("[Planting] seedItem is null or empty", LogLevel.Debug);
             return 0;
-        }
 
         // Resolve the seed ID (handles mixed seeds etc.)
         string rawItemId = seedItem.ItemId;  // e.g. "495" for parsnip seeds
         string resolvedId = Crop.ResolveSeedId(rawItemId, location);
-        _monitor?.Log($"[Planting] raw ItemId = {rawItemId}, resolved = {resolvedId}, stack = {seedItem.Stack}", LogLevel.Debug);
 
         // Check if the resolved seed has valid data
         if (!Crop.TryGetData(resolvedId, out var cropData) || cropData.Seasons.Count == 0)
-        {
-            _monitor?.Log($"[Planting] No crop data for {resolvedId}, aborting", LogLevel.Warn);
             return 0;
-        }
 
         // Check season compatibility (unless location ignores seasons)
         Season currentSeason = location.GetSeason();
         bool ignoreSeasons = location.SeedsIgnoreSeasonsHere();
         if (!ignoreSeasons && !cropData.Seasons.Contains(currentSeason))
-        {
-            _monitor?.Log($"[Planting] {resolvedId} cannot grow in {currentSeason}, aborting", LogLevel.Warn);
             return 0;
-        }
 
         const int halfStride = 4;
         int planted = 0;
@@ -72,8 +54,6 @@ internal static class PlantingExecutor
                     && feature is HoeDirt dirt
                     && dirt.crop == null)  // no crop yet
                 {
-                    _monitor?.Log($"[Planting] Planting at ({tile.X},{tile.Y})", LogLevel.Trace);
-
                     // Directly create the Crop object — bypasses HoeDirt.plant()
                     // Signature: Crop(string itemId, int tileX, int tileY, GameLocation location)
                     dirt.crop = new Crop(resolvedId, (int)tile.X, (int)tile.Y, location);
@@ -99,21 +79,15 @@ internal static class PlantingExecutor
 
                     planted++;
                     seedItem.Stack--;
-                    _monitor?.Log($"[Planting] Success at ({tile.X},{tile.Y}), remaining stack = {seedItem.Stack}", LogLevel.Debug);
                 }
             }
             if (seedItem.Stack <= 0)
                 break;
         }
 
-        _monitor?.Log($"[Planting] Total planted = {planted}", LogLevel.Info);
-
         // If stack is now zero, clear the player's held item
         if (seedItem.Stack <= 0 && player.CurrentItem == seedItem)
-        {
             player.removeItemFromInventory(seedItem);
-            _monitor?.Log("[Planting] Seed stack exhausted, removed from inventory", LogLevel.Debug);
-        }
 
         return planted;
     }

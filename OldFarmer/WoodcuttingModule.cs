@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewValley;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -18,21 +17,12 @@ internal sealed class WoodcuttingModule
 
     private readonly List<(GrandpaWoodcutterBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
     private readonly SharedTargetManager _targetMgr = new();
-    private IMonitor? _monitor;
     private Texture2D? _axeTexture;
-
-    public void SetMonitor(IMonitor monitor)
-    {
-        _monitor = monitor;
-        WoodcutterExecutor.SetMonitor(monitor);
-    }
 
     public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
     {
         var behavior = new GrandpaWoodcutterBehavior();
         behavior.SetTargetManager(_targetMgr);
-        if (_monitor != null)
-            behavior.SetMonitor(_monitor);
         _entries.Add((behavior, orbiter));
     }
 

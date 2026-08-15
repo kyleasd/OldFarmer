@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
 using System.Collections.Generic;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -37,8 +36,6 @@ internal sealed class GrandpaWatererBehavior
     private State currentState = State.Orbiting;
     private bool wasOnFarm = false;
 
-    private IMonitor? _monitor;
-
     // Preparing state
     private int currentStage;
     private bool isPreparing;
@@ -66,8 +63,6 @@ internal sealed class GrandpaWatererBehavior
     private int prepareTick;
     private int wateringTick;
     private int cooldownTick;
-
-    public void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
 
@@ -121,10 +116,7 @@ internal sealed class GrandpaWatererBehavior
         if (SanManager.GetSan(player) <= 0)
         {
             if (currentState != State.Orbiting)
-            {
                 TransitionTo(State.Orbiting);
-                _monitor?.Log("[Waterer] SAN <= 0, stopping work", LogLevel.Info);
-            }
             return;
         }
 

@@ -56,44 +56,4 @@ internal static class WoodcutterScanner
 
         return results;
     }
-
-    /// <summary>
-    /// Diagnostic: counts total Tree terrain features (any growth stage) and
-    /// choppable ones (stage ≥ 5 or stump), both within scan range.
-    /// Used for logging in <see cref="GrandpaWoodcutterBehavior"/>.
-    /// </summary>
-    public static (int totalTrees, int choppable) CountTrees(GameLocation location, Farmer player)
-    {
-        int total = 0, choppable = 0;
-
-        if (location.terrainFeatures is null || location.terrainFeatures.Count() == 0)
-            return (total, choppable);
-
-        var playerTile = player.Tile;
-
-        int minX = (int)playerTile.X - ScanRadius;
-        int minY = (int)playerTile.Y - ScanRadius;
-        int maxX = (int)playerTile.X + ScanRadius;
-        int maxY = (int)playerTile.Y + ScanRadius;
-
-        for (int tx = minX; tx <= maxX; tx++)
-        {
-            for (int ty = minY; ty <= maxY; ty++)
-            {
-                if (tx < 0 || ty < 0) continue;
-                var tilePos = new Vector2(tx, ty);
-                if (!location.isTileOnMap(tilePos)) continue;
-
-                if (location.terrainFeatures.TryGetValue(tilePos, out var feature)
-                    && feature is Tree tree)
-                {
-                    total++;
-                    if (tree.growthStage.Value >= 5 || tree.stump.Value)
-                        choppable++;
-                }
-            }
-        }
-
-        return (total, choppable);
-    }
 }

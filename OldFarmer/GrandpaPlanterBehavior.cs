@@ -1,8 +1,6 @@
 using Microsoft.Xna.Framework;
 using StardewValley;
-using StardewValley.Objects;
 using System.Collections.Generic;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -13,9 +11,6 @@ namespace OldFarmer;
 /// </summary>
 internal sealed class GrandpaPlanterBehavior
 {
-    private readonly IMonitor _monitor;
-    private int _stateChangeFrame = 0;
-
     // ── tunables ──────────────────────────────────────────────────
     private const int PlantingDurationTicks = 18; // ~0.3 s planting animation
     private const int CooldownDurationTicks  = 10; // ~0.17 s pause between passes
@@ -55,11 +50,6 @@ internal sealed class GrandpaPlanterBehavior
     private int plantingTick;
     private int cooldownTick;
 
-    public GrandpaPlanterBehavior(IMonitor monitor)
-    {
-        _monitor = monitor;
-    }
-
     public void SetTargetManager(SharedTargetManager mgr) => _targetMgr = mgr;
 
     private void ClaimCenter(Vector2 center)
@@ -85,14 +75,12 @@ internal sealed class GrandpaPlanterBehavior
     public void Reset()
     {
         ReleaseClaim();
-        var prev = currentState;
         currentState   = State.Orbiting;
         DrawShakeOffset = Vector2.Zero;
         plantingTick   = 0;
         cooldownTick   = 0;
         if (Game1.player != null)
             WorldPosition = Game1.player.getStandingPosition();
-        _monitor?.Log($"[Planter] Reset (was {prev})", LogLevel.Trace);
     }
 
     // ── main tick ─────────────────────────────────────────────────
@@ -108,10 +96,7 @@ internal sealed class GrandpaPlanterBehavior
         if (SanManager.GetSan(player) <= 0)
         {
             if (currentState != State.Orbiting)
-            {
                 TransitionTo(State.Orbiting);
-                _monitor?.Log("[Planter] SAN <= 0, stopping work", LogLevel.Info);
-            }
             return;
         }
 
@@ -135,13 +120,9 @@ internal sealed class GrandpaPlanterBehavior
                 TileCenter(targetTile), player.getStandingPosition());
 
             if (distToPlayer > LeashRadius || targetDistToPlayer > LeashRadius)
-            {
-                _monitor?.Log($"[Planter] Leash exceeded: distToPlayer={distToPlayer:F0}, targetDist={targetDistToPlayer:F0}", LogLevel.Trace);
                 TransitionTo(State.Orbiting);
-            }
         }
 
-        State prevState = currentState;
         switch (currentState)
         {
             case State.Orbiting:     TickOrbiting(loc, player);     break;
@@ -150,8 +131,6 @@ internal sealed class GrandpaPlanterBehavior
             case State.Cooldown:      TickCooldown();               break;
             case State.NextTarget:     TickNextTarget(loc, player);  break;
         }
-        if (prevState != currentState)
-            _monitor?.Log($"[Planter] State: {prevState} → {currentState}", LogLevel.Trace);
     }
 
     // ── per-state tick methods ────────────────────────────────────
@@ -176,7 +155,6 @@ internal sealed class GrandpaPlanterBehavior
         if (dist <= ArrivalThreshold)
         {
             WorldPosition = targetWorldPos;
-            _monitor?.Log($"[Planter] Arrived at ({targetTile.X},{targetTile.Y}), dist={dist:F1}", LogLevel.Debug);
             TransitionTo(State.PlantingTile);
         }
     }
@@ -196,23 +174,17 @@ internal sealed class GrandpaPlanterBehavior
             return;
 
         DrawShakeOffset = Vector2.Zero;
-        _monitor?.Log($"[Planter] Planting at ({targetTile.X},{targetTile.Y}), player.CurrentItem = {player.CurrentItem?.Name ?? "null"}", LogLevel.Debug);
 
         // Get seeds from player's held item
         if (player.CurrentItem is StardewValley.Object seedObj && IsSeeds(seedObj))
         {
             int planted = PlantingExecutor.PlantArea(loc, player, targetTile, seedObj);
-            _monitor?.Log($"[Planter] PlantArea returned {planted}", LogLevel.Info);
             if (planted > 0 && loc != null)
                 loc.playSound("dirtyHit");
 
             // Consume SAN for planting a 9x9 area (4 SAN per area)
             if (planted > 0 && Game1.player != null)
                 SanManager.AddSan(Game1.player, -4f);
-        }
-        else
-        {
-            _monitor?.Log($"[Planter] Not holding seeds when trying to plant! CurrentItem = {player.CurrentItem}", LogLevel.Warn);
         }
 
         plantingTick = 0;
@@ -233,7 +205,6 @@ internal sealed class GrandpaPlanterBehavior
     {
         if (!IsHoldingSeeds(player))
         {
-            _monitor?.Log("[Planter] Player no longer holding seeds, back to Orbiting", LogLevel.Debug);
             TransitionTo(State.Orbiting);
             return;
         }
@@ -343,8 +314,6 @@ internal sealed class GrandpaPlanterBehavior
             plantingTick = 0;
         if (next == State.Cooldown)
             cooldownTick = 0;
-
-        _stateChangeFrame = Environment.TickCount;
     }
 
     private void MoveToward(Vector2 target)

@@ -2,7 +2,6 @@ using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.TerrainFeatures;
 using StardewValley.Tools;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -29,9 +28,6 @@ internal static class WoodcutterExecutor
     private static readonly System.Collections.Generic.Dictionary<Vector2, int> LastHitTick = new();
 
     private static Axe? _axe;
-    private static IMonitor? _monitor;
-
-    public static void SetMonitor(IMonitor monitor) => _monitor = monitor;
 
     /// <summary>
     /// Lazily creates and caches a single Axe tool instance to reuse for all hits.
@@ -101,14 +97,7 @@ internal static class WoodcutterExecutor
                 LastHitTick[tilePos] = now;
 
                 // ── vanilla chopping — triggers animation/sound/felling/drops ──
-                float healthBefore = tree.health.Value;
                 tree.performToolAction(axe, 0, tilePos);
-
-                _monitor?.Log(
-                    $"[Woodcutter] Hit tree at ({tilePos.X:F0},{tilePos.Y:F0})  "
-                    + $"health: {healthBefore:F0}→{tree.health.Value:F0}  "
-                    + $"stump={tree.stump.Value}  tick={now}",
-                    LogLevel.Info);
 
                 // If the tree was completely destroyed this tick, count it
                 if (!location.terrainFeatures.ContainsKey(tilePos))

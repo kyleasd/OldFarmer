@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using StardewModdingAPI;
 
 namespace OldFarmer;
 
@@ -12,20 +11,11 @@ internal sealed class ScythingModule
 {
     private readonly List<(GrandpaScytherBehavior behavior, GrandpaSpiritOrbiter orbiter)> _entries = new();
     private readonly SharedTargetManager _targetMgr = new();
-    private IMonitor? _monitor;
-
-    public void SetMonitor(IMonitor monitor)
-    {
-        _monitor = monitor;
-        ScythingExecutor.SetMonitor(monitor);
-    }
 
     public void AddGrandpa(GrandpaSpiritOrbiter orbiter)
     {
         var behavior = new GrandpaScytherBehavior();
         behavior.SetTargetManager(_targetMgr);
-        if (_monitor != null)
-            behavior.SetMonitor(_monitor);
         _entries.Add((behavior, orbiter));
     }
 

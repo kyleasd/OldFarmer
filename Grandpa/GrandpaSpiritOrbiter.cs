@@ -143,6 +143,12 @@ internal sealed class GrandpaSpiritOrbiter
     public bool IsInCombatMode { get; set; }
     public Vector2 DrawShakeOffset { get; set; }
 
+    /// <summary>True while grandpa is in the mining module (draws the morph/cyclone animation).</summary>
+    public bool IsMiningMode { get; set; }
+
+    /// <summary>Frame animation used while <see cref="IsMiningMode"/> is true.</summary>
+    public GrandpaAnimation? MiningAnimation { get; set; }
+
     // ── orbit helpers (instance methods) ─────────────────────────
 
     /// <summary>
@@ -256,13 +262,25 @@ internal sealed class GrandpaSpiritOrbiter
             flip = Math.Cos(Angle) < 0;
         }
 
+        // Mining mode replaces grandpa's body with the morph/cyclone animation.
+        Texture2D drawTexture = texture;
+        Rectangle drawSource  = SourceRect;
+        Vector2   drawOrigin  = new(SourceRect.Width / 2f, SourceRect.Height / 2f);
+
+        if (IsMiningMode && MiningAnimation is not null)
+        {
+            drawTexture = MiningAnimation.Texture;
+            drawSource  = MiningAnimation.SourceRect;
+            drawOrigin  = MiningAnimation.Origin;
+        }
+
         spriteBatch.Draw(
-            texture,
+            drawTexture,
             screenPos,
-            SourceRect,
+            drawSource,
             drawColor,
             0f,
-            new Vector2(SourceRect.Width / 2f, SourceRect.Height / 2f),
+            drawOrigin,
             Scale,
             flip ? SpriteEffects.FlipHorizontally : SpriteEffects.None,
             layerDepth

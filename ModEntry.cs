@@ -25,6 +25,10 @@ internal sealed class ModEntry : Mod
     private readonly PlantingModule plantingModule;
     private readonly CombatModule combatModule;
 
+    // Mining needs IModHelper to load the animation sprite sheets, so it is
+    // created inside Entry() rather than the constructor.
+    private MiningModule miningModule = null!;
+
     public ModEntry()
     {
         tillingModule    = new TillingModule();
@@ -42,6 +46,8 @@ internal sealed class ModEntry : Mod
     /// <param name="helper">Provides simplified APIs for writing mods.</param>
     public override void Entry(IModHelper helper)
     {
+        miningModule = new MiningModule(helper);
+
         helper.Events.GameLoop.UpdateTicked  += OnUpdateTicked;
         helper.Events.GameLoop.DayEnding     += OnDayEnding;
         helper.Events.Display.RenderedWorld  += OnRenderedWorld;
@@ -128,17 +134,20 @@ internal sealed class ModEntry : Mod
             scythingModule.Disable();
             plantingModule.Disable();
             combatModule.Disable();
+            miningModule.Disable();
             return;
         }
 
         // ── Combat takes priority over all other activities ──────
-        // When monsters are within 10 tiles, all grandpas enter combat mode
-        // and other modules are paused.
+        // Grandpas only fight when monsters are within 10 tiles AND the
+        // player is actually holding a weapon. Merely walking around with a
+        // tool means grandpa keeps doing farm work instead.
         bool monstersNearby = Game1.player != null
             && Game1.currentLocation != null
             && MonsterScanner.HasMonstersNearby(Game1.currentLocation, Game1.player);
+        bool holdingWeapon = IsHoldingWeapon();
 
-        if (monstersNearby)
+        if (monstersNearby && holdingWeapon)
         {
             // Disable farming modules while fighting
             if (tillingModule.IsEnabled)    tillingModule.Disable();
@@ -146,6 +155,7 @@ internal sealed class ModEntry : Mod
             if (woodcuttingModule.IsEnabled) woodcuttingModule.Disable();
             if (scythingModule.IsEnabled)   scythingModule.Disable();
             if (plantingModule.IsEnabled)   plantingModule.Disable();
+            if (miningModule.IsEnabled)     miningModule.Disable();
 
             if (!combatModule.IsEnabled)
                 combatModule.Enable();
@@ -190,6 +200,14 @@ internal sealed class ModEntry : Mod
                 plantingModule.Enable();
             else if (!holdingSeeds && plantingModule.IsEnabled)
                 plantingModule.Disable();
+
+            // Enable mining inside a mine shaft / volcano dungeon while holding a pickaxe
+            bool inMine = Game1.currentLocation is MineShaft or VolcanoDungeon;
+            bool holdingPickaxe = Game1.player?.CurrentTool is Pickaxe;
+            if (inMine && holdingPickaxe && !miningModule.IsEnabled)
+                miningModule.Enable();
+            else if ((!inMine || !holdingPickaxe) && miningModule.IsEnabled)
+                miningModule.Disable();
         }
 
         tillingModule.Update();
@@ -198,6 +216,7 @@ internal sealed class ModEntry : Mod
         scythingModule.Update();
         plantingModule.Update();
         combatModule.Update();
+        miningModule.Update();
 
         // ── out-of-season seed bubble ────────────────────────────
         UpdateOutOfSeasonBubble();
@@ -219,6 +238,7 @@ internal sealed class ModEntry : Mod
         scythingModule.Draw(e.SpriteBatch);
         plantingModule.Draw(e.SpriteBatch);
         combatModule.Draw(e.SpriteBatch);
+        miningModule.Draw(e.SpriteBatch);
     }
 
     private void OnRenderedHud(object? sender, RenderedHudEventArgs e)
@@ -246,6 +266,7 @@ internal sealed class ModEntry : Mod
         scythingModule.RemoveAllGrandpas();
         plantingModule.RemoveAllGrandpas();
         combatModule.RemoveAllGrandpas();
+        miningModule.RemoveAllGrandpas();
 
         // Disable all modules
         tillingModule.Disable();
@@ -254,6 +275,7 @@ internal sealed class ModEntry : Mod
         scythingModule.Disable();
         plantingModule.Disable();
         combatModule.Disable();
+        miningModule.Disable();
 
         SanBarDrawer.ShouldDraw = false;
     }
@@ -293,6 +315,7 @@ internal sealed class ModEntry : Mod
             scythingModule.AddGrandpa(orbiter);
             plantingModule.AddGrandpa(orbiter);
             combatModule.AddGrandpa(orbiter);
+            miningModule.AddGrandpa(orbiter);
 
             int count = _grandpas.Count;
             string msg = count switch
@@ -315,6 +338,17 @@ internal sealed class ModEntry : Mod
         // Summoning visual & sound effects
         Game1.currentLocation?.playSound("yoba");
         Game1.flashAlpha = 0.5f;
+    }
+
+    /// <summary>
+    /// True when the player is holding a usable weapon (sword/club/dagger or
+    /// slingshot). Scythes are tools, not weapons.
+    /// </summary>
+    private static bool IsHoldingWeapon()
+    {
+        if (Game1.player?.CurrentTool is MeleeWeapon weapon)
+            return !weapon.Name.Contains("Scythe");
+        return Game1.player?.CurrentTool is Slingshot;
     }
 
     private static bool IsHoldingSeeds()

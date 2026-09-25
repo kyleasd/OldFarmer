@@ -11,7 +11,7 @@ namespace OldFarmer;
 /// </summary>
 internal static class HighlightDrawer
 {
-    // Vanilla tool-charge sprite: LooseSprites/Cursors → (208, 384, 16, 16)
+    // Vanilla tool-charge sprite: LooseSprites/Cursors → (194, 388, 16, 16)
     private static readonly Rectangle SourceRect = new(194, 388, 16, 16);
 
     // Scale matches vanilla: 16×4 = 64 px (one full tile)

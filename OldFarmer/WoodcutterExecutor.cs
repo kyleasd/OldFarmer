@@ -27,6 +27,14 @@ internal static class WoodcutterExecutor
     /// <summary>Tracks the last Game1.ticks value when each tile was damaged.</summary>
     private static readonly System.Collections.Generic.Dictionary<Vector2, int> LastHitTick = new();
 
+    /// <summary>
+    /// The location the hit cooldowns belong to. When the player changes
+    /// location the dictionary is cleared, so stale tile coordinates from
+    /// another map can't suppress the first hit on this map (and it doesn't
+    /// leak memory across locations).
+    /// </summary>
+    private static GameLocation? _lastLocation;
+
     private static Axe? _axe;
 
     /// <summary>
@@ -52,6 +60,12 @@ internal static class WoodcutterExecutor
         int destroyed = 0;
         int now = Game1.ticks;
         var axe = GetAxe();
+
+        if (!ReferenceEquals(_lastLocation, location))
+        {
+            LastHitTick.Clear();
+            _lastLocation = location;
+        }
 
         // ── CRITICAL: the tool must know who's swinging it, otherwise
         //             performToolAction may deal 0 damage.

@@ -64,8 +64,16 @@ internal sealed class PlantingModule
 
             behavior.Update();
 
-            orbiter.PlantingWorldPosition = behavior.WorldPosition;
-            orbiter.DrawShakeOffset = behavior.DrawShakeOffset;
+            if (behavior.IsPlanting)
+            {
+                orbiter.PlantingWorldPosition = behavior.WorldPosition;
+                orbiter.DrawShakeOffset = behavior.DrawShakeOffset;
+            }
+            else
+            {
+                orbiter.PlantingWorldPosition = null;
+                orbiter.DrawShakeOffset = Vector2.Zero;
+            }
         }
     }
 

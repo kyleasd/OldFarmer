@@ -16,10 +16,32 @@ internal sealed class GrandpaSpiritOrbiter
     private const string TexturePath = "LooseSprites\\Cursors";
     private static readonly Rectangle SourceRect = new(555, 1956, 18, 35);
     private const float Scale = 8f;
-    private const float BaseOrbitRadius = 200f;
-    private const float OrbitRadiusStep = 56f;  // each subsequent grandpa orbits further out
     private const float OrbitYShift = -80f;     // shift orbit center upward on screen
-    private const float OrbitSpeed = 0.015f;
+
+    /// <summary>Angular speed of the shared orbit ring (radians per tick).</summary>
+    public const float OrbitSpeed = 0.015f;
+
+    /// <summary>How many grandpas share the single orbit ring.</summary>
+    public const int GrandpasPerRing = 10;
+
+    /// <summary>
+    /// Radius of the single shared orbit ring. Every grandpa uses this same
+    /// radius, and they are spread evenly by angle, so the spacing between
+    /// neighbours is identical all the way around the ring.
+    /// </summary>
+    /// <remarks>
+    /// The value makes the axis-aligned sprite bounding boxes of neighbouring
+    /// grandpas just touch at the worst angle. The minimum centre-to-centre
+    /// distance that keeps two axis-aligned rectangles of size (w, h) apart in
+    /// every direction is sqrt(w² + h²); on a ring of N evenly spaced points
+    /// that distance equals the chord 2·R·sin(π/N), hence:
+    ///     R = sqrt(w² + h²) / (2·sin(π/N)).
+    /// </remarks>
+    public static float UniformOrbitRadius { get; } =
+        (float)Math.Sqrt(
+            (SourceRect.Width * Scale) * (SourceRect.Width * Scale) +
+            (SourceRect.Height * Scale) * (SourceRect.Height * Scale))
+        / (2f * (float)Math.Sin(Math.PI / GrandpasPerRing));
 
     // ── fade-out animation ──────────────────────────────────────
     private const float FadeOutDuration = 2.0f; // seconds
@@ -27,23 +49,27 @@ internal sealed class GrandpaSpiritOrbiter
     private bool _isFadingOut;
     private bool _isDestroyed = true; // 默认不出现，需召唤
 
-    private float angle;
+    private float _orbitPhase;                 // shared ring phase, advanced by ModEntry
     private readonly float _angleOffset;
-    private readonly float _orbitRadius;  // per-grandpa radius (BaseOrbitRadius + index * OrbitRadiusStep)
+    private readonly float _orbitRadius;  // shared ring radius (see UniformOrbitRadius)
     private Texture2D? texture;
+
+    /// <summary>This grandpa's current angle on the shared ring.</summary>
+    private float Angle => _orbitPhase + _angleOffset;
 
     /// <param name="angleOffset">
     ///   Starting angle (radians) on the orbit circle. Pass different values
-    ///   for each grandpa to spread them visually around the player.
+    ///   for each grandpa to spread them evenly around the ring.
     /// </param>
     /// <param name="orbitRadius">
-    ///   Radius of this grandpa's orbit ring in pixels. Use different radii
-    ///   for each grandpa so they don't overlap when orbiting at similar angles.
+    ///   Radius of the shared orbit ring in pixels. Defaults to
+    ///   <see cref="UniformOrbitRadius"/>; all grandpas should use the same
+    ///   value so their spacing is uniform.
     /// </param>
-    public GrandpaSpiritOrbiter(float angleOffset = 0f, float orbitRadius = BaseOrbitRadius)
+    public GrandpaSpiritOrbiter(float angleOffset = 0f, float? orbitRadius = null)
     {
         _angleOffset  = angleOffset;
-        _orbitRadius  = orbitRadius;
+        _orbitRadius  = orbitRadius ?? UniformOrbitRadius;
     }
 
     /// <summary>
@@ -78,6 +104,14 @@ internal sealed class GrandpaSpiritOrbiter
     }
 
     /// <summary>
+    /// Set the shared orbit phase. Every grandpa on the ring receives the same
+    /// phase, so their relative angles (the <c>angleOffset</c>s) stay fixed and
+    /// the spacing between neighbours remains uniform no matter when each one
+    /// was summoned.
+    /// </summary>
+    public void SetOrbitPhase(float phase) => _orbitPhase = phase;
+
+    /// <summary>
     /// Revive the grandpa spirit after it was destroyed (SAN hit 0).
     /// Resets all internal state so the spirit can orbit and draw again.
     /// </summary>
@@ -86,7 +120,6 @@ internal sealed class GrandpaSpiritOrbiter
         _isDestroyed = false;
         _isFadingOut = false;
         _fadeTimer    = FadeOutDuration;
-        angle         = _angleOffset;
     }
 
     /// <summary>
@@ -118,12 +151,12 @@ internal sealed class GrandpaSpiritOrbiter
     public Vector2 GetOrbitOffset()
     {
         return new Vector2(
-            (float)Math.Cos(angle) * _orbitRadius,
-            (float)Math.Sin(angle) * _orbitRadius + OrbitYShift);
+            (float)Math.Cos(Angle) * _orbitRadius,
+            (float)Math.Sin(Angle) * _orbitRadius + OrbitYShift);
     }
 
     /// <summary>Allow behaviors to read the current orbit angle.</summary>
-    public float GetOrbitAngle() => angle;
+    public float GetOrbitAngle() => Angle;
 
     // ── game loop ────────────────────────────────────────────────
 
@@ -141,8 +174,6 @@ internal sealed class GrandpaSpiritOrbiter
                 return;
             }
         }
-
-        angle += OrbitSpeed;
     }
 
     public void Draw(SpriteBatch spriteBatch)
@@ -216,13 +247,13 @@ internal sealed class GrandpaSpiritOrbiter
             Vector2 playerScreen = Game1.GlobalToLocal(Game1.viewport, playerWorld);
 
             screenPos = playerScreen + new Vector2(
-                (float)Math.Cos(angle) * _orbitRadius,
-                (float)Math.Sin(angle) * _orbitRadius + OrbitYShift);
+                (float)Math.Cos(Angle) * _orbitRadius,
+                (float)Math.Sin(Angle) * _orbitRadius + OrbitYShift);
 
             // Approximate world Y for layer depth: convert screen offset back
-            float worldY = playerWorld.Y + (float)Math.Sin(angle) * _orbitRadius + OrbitYShift;
+            float worldY = playerWorld.Y + (float)Math.Sin(Angle) * _orbitRadius + OrbitYShift;
             layerDepth = Math.Max(0.0001f, (worldY + 32f) / 10000f);
-            flip = Math.Cos(angle) < 0;
+            flip = Math.Cos(Angle) < 0;
         }
 
         spriteBatch.Draw(

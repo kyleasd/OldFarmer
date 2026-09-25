@@ -11,13 +11,12 @@ namespace OldFarmer;
 internal sealed class ModEntry : Mod
 {
     /// <summary>Maximum number of grandpas that can be summoned simultaneously.</summary>
-    private const int MaxGrandpas = 10;
-
-    // Orbit parameters — must match GrandpaSpiritOrbiter's constants
-    private const float BaseOrbitRadius = 200f;
-    private const float OrbitRadiusStep = 56f;
+    private const int MaxGrandpas = GrandpaSpiritOrbiter.GrandpasPerRing;
 
     private readonly List<GrandpaSpiritOrbiter> _grandpas = new();
+
+    /// <summary>Shared orbit phase; every grandpa's angle = phase + its offset.</summary>
+    private float _orbitPhase;
 
     private readonly TillingModule tillingModule;
     private readonly WoodcuttingModule woodcuttingModule;
@@ -87,6 +86,14 @@ internal sealed class ModEntry : Mod
         // Update all active grandpa orbiters
         foreach (var g in _grandpas)
             g.Update();
+
+        // Advance the shared orbit phase so all grandpas stay evenly spaced
+        // regardless of when each one was summoned.
+        _orbitPhase += GrandpaSpiritOrbiter.OrbitSpeed;
+        if (_orbitPhase >= MathF.PI * 2f)
+            _orbitPhase -= MathF.PI * 2f;
+        foreach (var g in _grandpas)
+            g.SetOrbitPhase(_orbitPhase);
 
         // Remove fully destroyed orbiters (fade-out complete)
         _grandpas.RemoveAll(g => g.IsDestroyed);
@@ -230,6 +237,7 @@ internal sealed class ModEntry : Mod
         foreach (var g in _grandpas)
             g.Dismiss();
         _grandpas.Clear();
+        _orbitPhase = 0f;
 
         // Clear all module grandpa entries
         tillingModule.RemoveAllGrandpas();
@@ -266,13 +274,17 @@ internal sealed class ModEntry : Mod
         // Add a new grandpa if under the cap
         if (_grandpas.Count < MaxGrandpas)
         {
-            // Spread grandpas evenly around the orbit circle,
-            // each on a different concentric ring so they don't overlap
+            // Spread grandpas evenly by angle on one shared ring (same radius
+            // for everyone) so the spacing between neighbours is uniform.
             float angleOffset = _grandpas.Count * (MathF.PI * 2f / MaxGrandpas);
-            float orbitRadius = BaseOrbitRadius + _grandpas.Count * OrbitRadiusStep;
-            var orbiter = new GrandpaSpiritOrbiter(angleOffset, orbitRadius);
+            var orbiter = new GrandpaSpiritOrbiter(angleOffset);
             orbiter.Revive();
             _grandpas.Add(orbiter);
+
+            // Snap every grandpa (including the new one) to the shared phase so
+            // the ring is immediately evenly spaced.
+            foreach (var g in _grandpas)
+                g.SetOrbitPhase(_orbitPhase);
 
             // Register with all modules
             tillingModule.AddGrandpa(orbiter);

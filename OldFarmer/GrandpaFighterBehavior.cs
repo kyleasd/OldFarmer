@@ -61,7 +61,9 @@ internal sealed class GrandpaFighterBehavior
 
     // Cached Bug-Killer sword used to pierce Armored Bug immunity.
     // Lazily created on first use (game content must be loaded first).
-    private static MeleeWeapon? _bugKillerWeapon;
+    // Per-instance (not static) so multiple grandpas / players never share
+    // a weapon that gets temporarily equipped on the player.
+    private MeleeWeapon? _bugKillerWeapon;
 
     // ── public output ─────────────────────────────────────────────
 
@@ -465,32 +467,42 @@ internal sealed class GrandpaFighterBehavior
     private void DealDamageToArmoredBug(GameLocation loc, Farmer player, Bug bug, int damage, Rectangle area)
     {
         var oldTool = player.CurrentTool;
-        player.CurrentTool = GetBugKillerWeapon();
 
-        // Clear any invincibility frames left by the player's own attacks.
-        bug.invincibleCountdown = 0;
+        // try/finally guarantees the player's real tool is restored even if
+        // damageMonster throws (e.g. a modded monster/crop handler fails).
+        // Without this, an exception would permanently leave the Bug-Killer
+        // sword equipped on the player.
+        try
+        {
+            player.CurrentTool = GetBugKillerWeapon();
 
-        // isBomb=false is REQUIRED — isBomb=true makes Armored Bugs immune.
-        // isProjectile=true bypasses isMonsterDamageApplicable (LOS check),
-        // which would otherwise block the hit when the player is far from the
-        // monster or walls are in the way. isProjectile has no other effect
-        // inside damageMonster.
-        loc.damageMonster(
-            area,           // areaOfEffect
-            damage,         // minDamage
-            damage,         // maxDamage
-            false,          // isBomb — MUST be false for Armored Bug
-            0.5f,           // knockBackModifier
-            0,              // addedPrecision
-            0f,             // critChance
-            1f,             // critMultiplier
-            false,          // triggerMonsterInvincibleTimer
-            player,         // who
-            true            // isProjectile — bypass LOS check
-        );
+            // Clear any invincibility frames left by the player's own attacks.
+            bug.invincibleCountdown = 0;
 
-        // Restore the player's real tool immediately.
-        player.CurrentTool = oldTool;
+            // isBomb=false is REQUIRED — isBomb=true makes Armored Bugs immune.
+            // isProjectile=true bypasses isMonsterDamageApplicable (LOS check),
+            // which would otherwise block the hit when the player is far from the
+            // monster or walls are in the way. isProjectile has no other effect
+            // inside damageMonster.
+            loc.damageMonster(
+                area,           // areaOfEffect
+                damage,         // minDamage
+                damage,         // maxDamage
+                false,          // isBomb — MUST be false for Armored Bug
+                0.5f,           // knockBackModifier
+                0,              // addedPrecision
+                0f,             // critChance
+                1f,             // critMultiplier
+                false,          // triggerMonsterInvincibleTimer
+                player,         // who
+                true            // isProjectile — bypass LOS check
+            );
+        }
+        finally
+        {
+            // Restore the player's real tool immediately.
+            player.CurrentTool = oldTool;
+        }
 
         // Small SAN cost per hit
         SanManager.AddSan(player, -0.5f);
@@ -505,7 +517,7 @@ internal sealed class GrandpaFighterBehavior
     /// pierce Armored Bug immunity. Created lazily on first use because
     /// ItemRegistry requires game content to be loaded first.
     /// </summary>
-    private static MeleeWeapon GetBugKillerWeapon()
+    private MeleeWeapon GetBugKillerWeapon()
     {
         if (_bugKillerWeapon is null)
         {

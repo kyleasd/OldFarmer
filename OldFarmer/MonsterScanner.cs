@@ -26,8 +26,8 @@ internal static class MonsterScanner
         var results = new List<Monster>();
         var playerPos = player.getStandingPosition();
 
-        // Iterate over a snapshot to avoid collection-modified exceptions
-        // when a monster dies and is removed mid-iteration.
+        // Death/damage is applied after this scan completes (the caller acts on
+        // the returned list), so the live collection can be iterated directly.
         foreach (var character in location.characters)
         {
             if (character is not Monster monster)

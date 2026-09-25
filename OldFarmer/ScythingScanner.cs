@@ -18,8 +18,13 @@ internal static class ScythingScanner
     // ── Scythe-harvestable crop detection ───────────────────────
 
     /// <summary>
-    /// Returns all tiles within scan range that contain a crop ready to be
-    /// harvested with a scythe (harvestMethod == 1).
+    /// Returns all tiles within scan range that contain a mature crop
+    /// (final growth phase, not dead).
+    /// <para>
+    /// Note: this intentionally does NOT filter by <c>harvestMethod</c> —
+    /// grandpa's scythe harvests every mature crop, matching the "all crops"
+    /// behaviour documented on <see cref="ScythingExecutor.HarvestArea"/>.
+    /// </para>
     /// </summary>
     public static List<Vector2> GetHarvestableCropTiles(GameLocation location, Farmer player)
     {

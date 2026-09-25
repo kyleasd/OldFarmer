@@ -1,0 +1,139 @@
+{ "frames": {
+   "grandpa_morph 0.aseprite": {
+    "frame": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 1.aseprite": {
+    "frame": { "x": 44, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 2.aseprite": {
+    "frame": { "x": 88, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 3.aseprite": {
+    "frame": { "x": 132, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 4.aseprite": {
+    "frame": { "x": 176, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 5.aseprite": {
+    "frame": { "x": 220, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 6.aseprite": {
+    "frame": { "x": 264, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 7.aseprite": {
+    "frame": { "x": 308, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 8.aseprite": {
+    "frame": { "x": 352, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 9.aseprite": {
+    "frame": { "x": 396, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 10.aseprite": {
+    "frame": { "x": 440, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 11.aseprite": {
+    "frame": { "x": 484, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 12.aseprite": {
+    "frame": { "x": 528, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 13.aseprite": {
+    "frame": { "x": 572, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 14.aseprite": {
+    "frame": { "x": 616, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   },
+   "grandpa_morph 15.aseprite": {
+    "frame": { "x": 660, "y": 0, "w": 44, "h": 52 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 44, "h": 52 },
+    "sourceSize": { "w": 44, "h": 52 },
+    "duration": 65535
+   }
+ },
+ "meta": {
+  "app": "https://www.aseprite.org/",
+  "version": "1.3.18.5-dev",
+  "image": "grandpa_morph_sheet.png",
+  "format": "RGBA8888",
+  "size": { "w": 704, "h": 52 },
+  "scale": "1"
+ }
+}

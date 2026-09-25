@@ -1,0 +1,107 @@
+{ "frames": {
+   "grandpa_spin 0.aseprite": {
+    "frame": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 1.aseprite": {
+    "frame": { "x": 40, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 2.aseprite": {
+    "frame": { "x": 80, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 3.aseprite": {
+    "frame": { "x": 120, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 4.aseprite": {
+    "frame": { "x": 160, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 5.aseprite": {
+    "frame": { "x": 200, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 6.aseprite": {
+    "frame": { "x": 240, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 7.aseprite": {
+    "frame": { "x": 280, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 8.aseprite": {
+    "frame": { "x": 320, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 9.aseprite": {
+    "frame": { "x": 360, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 10.aseprite": {
+    "frame": { "x": 400, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   },
+   "grandpa_spin 11.aseprite": {
+    "frame": { "x": 440, "y": 0, "w": 40, "h": 44 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 40, "h": 44 },
+    "sourceSize": { "w": 40, "h": 44 },
+    "duration": 60000
+   }
+ },
+ "meta": {
+  "app": "https://www.aseprite.org/",
+  "version": "1.3.18.5-dev",
+  "image": "grandpa_spin_sheet.png",
+  "format": "RGBA8888",
+  "size": { "w": 480, "h": 44 },
+  "scale": "1"
+ }
+}

@@ -150,12 +150,13 @@ internal static class SanBarDrawer
         // ── hover tooltip ──
         int mouseX = Game1.getOldMouseX();
         int mouseY = Game1.getOldMouseY();
-        if (mouseX >= sanVec.X && mouseY >= sanVec.Y && mouseX < sanVec.X + BarWidth)
+        if (mouseX >= sanVec.X && mouseX < sanVec.X + BarWidth
+            && mouseY >= sanVec.Y && mouseY < sanVec.Y + barInnerH)
         {
             Game1.drawWithBorder(
                 $"{(int)Math.Max(0f, _displayedSan)}/{maxSan}",
-                Color.Black * 0f,
-                new Color(180, 140, 255),
+                new Color(200, 170, 255),
+                Color.Black * 0.65f,
                 sanVec + new Vector2(-Game1.dialogueFont.MeasureString("999/999").X - 16f, 64f));
         }
     }

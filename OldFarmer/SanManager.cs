@@ -1,3 +1,4 @@
+using System.Globalization;
 using StardewValley;
 
 namespace OldFarmer;
@@ -28,10 +29,9 @@ internal static class SanManager
     /// </summary>
     public static int GetMaxSan(Farmer farmer)
     {
-        return Math.Max(BaseMaxSan,
-            BaseMaxSan + 10 * (farmer.FarmingLevel + farmer.MiningLevel
-                             + farmer.ForagingLevel + farmer.FishingLevel
-                             + farmer.CombatLevel));
+        return BaseMaxSan + 10 * (farmer.FarmingLevel + farmer.MiningLevel
+                                  + farmer.ForagingLevel + farmer.FishingLevel
+                                  + farmer.CombatLevel);
     }
 
     /// <summary>
@@ -41,7 +41,7 @@ internal static class SanManager
     public static float GetSan(Farmer farmer)
     {
         if (!farmer.modData.TryGetValue(ModDataKey, out string? raw) ||
-            !float.TryParse(raw, out float value))
+            !float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
         {
             // First ever access for this save: start at full SAN
             value = GetMaxSan(farmer);
@@ -56,7 +56,7 @@ internal static class SanManager
     public static void SetSan(Farmer farmer, float value)
     {
         float clamped = Math.Clamp(value, 0f, GetMaxSan(farmer));
-        farmer.modData[ModDataKey] = clamped.ToString("F2");
+        farmer.modData[ModDataKey] = clamped.ToString("F2", CultureInfo.InvariantCulture);
     }
 
     /// <summary>

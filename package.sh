@@ -7,7 +7,7 @@ echo "========================================"
 echo ""
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$ROOT_DIR/OldFarmer"
+PROJECT_DIR="$ROOT_DIR"
 CSPROJ="$PROJECT_DIR/OldFarmer.csproj"
 MANIFEST="$PROJECT_DIR/manifest.json"
 

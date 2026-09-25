@@ -12,7 +12,7 @@
 | 必备物品 | 神秘糖浆 `(O)MysticSyrup`（召唤爷爷用） |
 | 可选工具 | 锄头、洒水壶、镰刀、斧头、任意种子、武器 |
 
-> 部署：`dotnet build OldFarmer/OldFarmer.csproj` 后，ModBuildConfig 会自动把模组复制到 `Stardew Valley/Mods/OldFarmer`。
+> 部署：`dotnet build OldFarmer.csproj` 后，ModBuildConfig 会自动把模组复制到 `Stardew Valley/Mods/OldFarmer`。
 
 ## 二、测试准备
 

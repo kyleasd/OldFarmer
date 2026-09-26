@@ -26,6 +26,13 @@ internal sealed class MiningModule
     // Overall chance (percent) that a drop is a bonus resource instead of ore.
     private const int BonusChancePercent = 15;
 
+    // Chance (percent) that a drop is radioactive ore in a dangerous mine.
+    private const int RadioactiveChancePercent = 5;
+
+    // Chance (percent) that a deep/volcano drop is a prismatic shard. Kept as a
+    // mutable property so Generic Mod Config Menu can adjust it at runtime.
+    public static float PrismaticShardChancePercent { get; set; } = 0.9f;
+
     // Vanilla object ids used for the rain.
     private const int StoneId          = 390;
     private const int CopperOreId      = 378;
@@ -60,28 +67,13 @@ internal sealed class MiningModule
     private const int CaveCarrotId       = 78;
     private const int CommonMushroomId   = 404;
     private const int RedMushroomId      = 420;
-    private const int PurpleMushroomId   = 422;
 
     // Materials
     private const int ClayId             = 330;
-    private const int RefinedQuartzId    = 338;
-    private const int CopperBarId        = 334;
-    private const int IronBarId          = 335;
-    private const int GoldBarId          = 336;
-    private const int IridiumBarId       = 337;
-
-    // Monster drops
-    private const int SlimeId            = 766;
-    private const int BatWingId          = 767;
-    private const int SolarEssenceId     = 768;
-    private const int VoidEssenceId      = 769;
-    private const int BugMeatId          = 684;
-    private const int BoneFragmentId     = 579;
 
     // Volcano dungeon
     private const int CinderShardId      = 848;
     private const int MagmaCapId         = 851;
-    private const int GoldenWalnutId     = 73;
 
     private sealed class Entry
     {
@@ -123,24 +115,41 @@ internal sealed class MiningModule
 
     public bool IsEnabled { get; private set; }
 
-    public void Enable() => IsEnabled = true;
+    public void Enable()
+    {
+        IsEnabled = true;
+
+        // Replay the morph transition every time mining mode is (re)entered,
+        // so switching away to another item and back shows the animation again.
+        foreach (var entry in _entries)
+            entry.Animation.Reset();
+    }
 
     public void Disable()
     {
         IsEnabled = false;
+        _falling.Clear();
+
+        // Play the morph backwards so grandpa visibly reverts to normal instead
+        // of snapping back instantly.
         foreach (var entry in _entries)
         {
-            entry.Orbiter.IsMiningMode    = false;
-            entry.Orbiter.MiningAnimation = null;
+            if (entry.Orbiter.IsDestroyed || entry.Orbiter.IsFadingOut())
+            {
+                entry.Orbiter.IsMiningMode    = false;
+                entry.Orbiter.MiningAnimation = null;
+                continue;
+            }
+
+            entry.Animation.PlayReverse();
         }
-        _falling.Clear();
     }
 
     // ── game loop hooks ───────────────────────────────────────────
 
     public void Update()
     {
-        if (!IsEnabled || Game1.player is null || Game1.currentLocation is null)
+        if (Game1.player is null || Game1.currentLocation is null)
             return;
 
         var loc    = Game1.currentLocation;
@@ -156,12 +165,32 @@ internal sealed class MiningModule
             _                => 1,
         };
 
+        // Radioactive ore only spawns in a "dangerous" mine (vanilla: the
+        // Danger in the Deep quest / Shrine of Challenge, or the Skull Cavern
+        // Invasion/statue).
+        bool dangerousMine = IsDangerousMine(loc);
+
         foreach (var entry in _entries)
         {
             if (entry.Orbiter.IsDestroyed || entry.Orbiter.IsFadingOut())
                 continue;
 
             entry.Animation.Update();
+
+            // Reverse morph: grandpa is turning back from the cyclone. Keep
+            // drawing the animation until it fully reverts, then drop back to
+            // the normal spirit sprite.
+            if (entry.Animation.IsReversing)
+            {
+                bool stillReversing = !entry.Animation.IsReversingDone;
+                entry.Orbiter.IsMiningMode    = stillReversing;
+                entry.Orbiter.MiningAnimation = stillReversing ? entry.Animation : null;
+                continue;
+            }
+
+            if (!IsEnabled)
+                continue;
+
             entry.Orbiter.IsMiningMode    = true;
             entry.Orbiter.MiningAnimation = entry.Animation;
 
@@ -172,9 +201,12 @@ internal sealed class MiningModule
             if (entry.SpawnTimer >= SpawnIntervalTicks)
             {
                 entry.SpawnTimer = 0;
-                SpawnOre(loc, player, mineLevel, isVolcano);
+                SpawnOre(loc, player, mineLevel, isVolcano, dangerousMine);
             }
         }
+
+        if (!IsEnabled)
+            return;
 
         for (int i = _falling.Count - 1; i >= 0; i--)
         {
@@ -187,7 +219,7 @@ internal sealed class MiningModule
         }
     }
 
-    private void SpawnOre(GameLocation loc, Farmer player, int mineLevel, bool isVolcano)
+    private void SpawnOre(GameLocation loc, Farmer player, int mineLevel, bool isVolcano, bool dangerousMine)
     {
         Vector2 playerTile = player.Tile;
 
@@ -202,7 +234,7 @@ internal sealed class MiningModule
                 continue;
 
             var target = new Vector2(tx * 64f + 32f, ty * 64f + 32f);
-            _falling.Add(new FallingOre(PickOreItem(mineLevel, isVolcano), target));
+            _falling.Add(new FallingOre(PickOreItem(mineLevel, isVolcano, dangerousMine), target));
             return;
         }
     }
@@ -253,11 +285,29 @@ internal sealed class MiningModule
     }
 
     /// <summary>
-    /// Weighted ore pick based on how deep the mine shaft is.
-    /// Deeper levels bias towards more valuable ores; the volcano dungeon
-    /// additionally yields radioactive ore and dragon teeth.
+    /// True when the current mine is in its "dangerous" variant, where vanilla
+    /// radioactive nodes can spawn (Danger in the Deep / Shrine of Challenge,
+    /// or the Skull Cavern Invasion / entrance statue).
     /// </summary>
-    private static int PickOreItem(int mineLevel, bool isVolcano)
+    private static bool IsDangerousMine(GameLocation loc)
+    {
+        if (loc is not MineShaft shaft)
+            return false;
+
+        var world = Game1.netWorldState.Value;
+        return shaft.mineLevel > 120
+            ? world.SkullCavesDifficulty > 0
+            : world.MinesDifficulty > 0;
+    }
+
+    /// <summary>
+    /// Weighted ore pick based on how deep the mine shaft is, matching the
+    /// vanilla ore distribution: copper (1-39), iron (40-79), gold (80-120),
+    /// iridium (Skull Cavern), plus coal and stone. The volcano dungeon yields
+    /// cinder shards, gold and iridium. Radioactive ore only appears in a
+    /// dangerous mine / Skull Cavern.
+    /// </summary>
+    private static int PickOreItem(int mineLevel, bool isVolcano, bool dangerousMine)
     {
         int roll = Game1.random.Next(100);
 
@@ -265,55 +315,71 @@ internal sealed class MiningModule
         if (roll < BonusChancePercent)
             return PickBonusItem(mineLevel, isVolcano);
 
+        // Radioactive nodes exist only in a dangerous mine, and can appear at
+        // any depth (vanilla: Shrine of Challenge / Danger in the Deep, or the
+        // Skull Cavern Invasion / entrance statue).
+        if (dangerousMine && !isVolcano && Game1.random.Next(100) < RadioactiveChancePercent)
+            return RadioactiveOreId;
+
+        // Prismatic shards come from mystic stones / iridium nodes in the deep
+        // mines, Skull Cavern and volcano dungeon. The chance is configurable
+        // through Generic Mod Config Menu.
+        if ((isVolcano || mineLevel >= 80)
+            && Game1.random.NextDouble() * 100.0 < PrismaticShardChancePercent)
+            return PrismaticShardId;
+
         if (isVolcano)
         {
-            if (roll < 35) return StoneId;
-            if (roll < 55) return RadioactiveOreId;
-            if (roll < 67) return DragonToothId;
-            if (roll < 82) return IridiumOreId;
-            if (roll < 92) return GoldOreId;
+            if (roll < 30) return StoneId;
+            if (roll < 52) return CinderShardId;
+            if (roll < 64) return IridiumOreId;
+            if (roll < 78) return GoldOreId;
+            if (roll < 88) return IronOreId;
+            if (roll < 95) return CopperOreId;
             return CoalId;
         }
 
-        if (mineLevel >= 120)
+        if (mineLevel > 120)
         {
-            if (roll < 40) return StoneId;
-            if (roll < 55) return IridiumOreId;
-            if (roll < 70) return GoldOreId;
-            if (roll < 82) return RadioactiveOreId;
-            if (roll < 90) return CoalId;
-            if (roll < 95) return IronOreId;
-            return DragonToothId;
+            // Skull Cavern: copper/iron/gold/iridium nodes all appear.
+            if (roll < 34) return StoneId;
+            if (roll < 52) return IridiumOreId;
+            if (roll < 66) return GoldOreId;
+            if (roll < 76) return IronOreId;
+            if (roll < 85) return CopperOreId;
+            if (roll < 92) return CoalId;
+            return IridiumOreId;
         }
         if (mineLevel >= 80)
         {
-            if (roll < 50) return StoneId;
-            if (roll < 70) return GoldOreId;
-            if (roll < 88) return IronOreId;
-            if (roll < 96) return CoalId;
-            return CopperOreId;
+            // Gold layer.
+            if (roll < 44) return StoneId;
+            if (roll < 66) return GoldOreId;
+            if (roll < 78) return IronOreId;
+            if (roll < 88) return CopperOreId;
+            if (roll < 95) return CoalId;
+            return GoldOreId;
         }
         if (mineLevel >= 40)
         {
-            if (roll < 55) return StoneId;
-            if (roll < 75) return IronOreId;
-            if (roll < 90) return CopperOreId;
-            if (roll < 97) return CoalId;
-            return GoldOreId;
+            // Iron layer (no gold until floor 80).
+            if (roll < 50) return StoneId;
+            if (roll < 76) return IronOreId;
+            if (roll < 88) return CopperOreId;
+            return CoalId;
         }
 
-        if (roll < 60) return StoneId;
-        if (roll < 80) return CopperOreId;
-        if (roll < 92) return CoalId;
-        if (roll < 98) return IronOreId;
-        return GoldOreId;
+        // Copper layer.
+        if (roll < 55) return StoneId;
+        if (roll < 82) return CopperOreId;
+        return CoalId;
     }
 
     /// <summary>
-    /// Picks one of the bonus (non-ore) resources for the current area:
-    /// gems, geodes, forage/mushrooms, materials, monster drops and
-    /// volcano-exclusive loot. Only reached on the <see cref="BonusChancePercent"/>
-    /// roll.
+    /// Picks one of the bonus (non-ore) resources for the current area: gems,
+    /// geodes, forage and cinder shards. Only reached on the
+    /// <see cref="BonusChancePercent"/> roll. The pools mirror what the vanilla
+    /// stone/gem nodes of each area can actually drop.
     /// </summary>
     private static int PickBonusItem(int mineLevel, bool isVolcano)
     {
@@ -321,67 +387,70 @@ internal sealed class MiningModule
 
         if (isVolcano)
         {
-            if (roll < 25) return CinderShardId;
-            if (roll < 38) return MagmaCapId;
-            if (roll < 46) return DragonToothId;
-            if (roll < 50) return GoldenWalnutId;
-            if (roll < 60) return DiamondId;
-            if (roll < 68) return OmniGeodeId;
-            if (roll < 74) return PrismaticShardId;
-            if (roll < 82) return RubyId;
-            if (roll < 88) return EmeraldId;
-            if (roll < 92) return SolarEssenceId;
-            if (roll < 96) return VoidEssenceId;
-            return RefinedQuartzId;
+            // Volcano nodes: cinder shards, omni geodes, gems and magma caps,
+            // plus the occasional dragon tooth from volcanic rocks.
+            if (roll < 20) return CinderShardId;
+            if (roll < 34) return OmniGeodeId;
+            if (roll < 46) return DiamondId;
+            if (roll < 58) return RubyId;
+            if (roll < 68) return EmeraldId;
+            if (roll < 76) return MagmaCapId;
+            if (roll < 84) return AquamarineId;
+            return DragonToothId;
+        }
+
+        if (mineLevel > 120)
+        {
+            // Skull Cavern: gem nodes, diamond nodes and omni geodes.
+            if (roll < 20) return DiamondId;
+            if (roll < 33) return OmniGeodeId;
+            if (roll < 46) return RubyId;
+            if (roll < 58) return EmeraldId;
+            if (roll < 68) return AmethystId;
+            if (roll < 77) return TopazId;
+            if (roll < 85) return JadeId;
+            if (roll < 92) return AquamarineId;
+            return DiamondId;
         }
 
         if (mineLevel >= 80)
         {
-            if (roll < 14) return MagmaGeodeId;
-            if (roll < 22) return GoldBarId;
-            if (roll < 30) return RubyId;
-            if (roll < 38) return EmeraldId;
-            if (roll < 44) return DiamondId;
-            if (roll < 50) return OmniGeodeId;
-            if (roll < 56) return FireQuartzId;
-            if (roll < 62) return SolarEssenceId;
-            if (roll < 68) return VoidEssenceId;
-            if (roll < 74) return BoneFragmentId;
-            if (roll < 80) return RefinedQuartzId;
-            if (roll < 86) return PurpleMushroomId;
-            if (roll < 94) return IridiumBarId;
-            return PrismaticShardId;
+            // Gold layer: fire quartz, ruby/emerald and magma geodes.
+            if (roll < 16) return MagmaGeodeId;
+            if (roll < 30) return DiamondId;
+            if (roll < 44) return FireQuartzId;
+            if (roll < 56) return RubyId;
+            if (roll < 66) return EmeraldId;
+            if (roll < 76) return AmethystId;
+            if (roll < 85) return TopazId;
+            if (roll < 92) return JadeId;
+            return AquamarineId;
         }
 
         if (mineLevel >= 40)
         {
+            // Iron layer: frozen geodes, aquamarine/jade, frozen tears.
             if (roll < 16) return FrozenGeodeId;
-            if (roll < 26) return AquamarineId;
-            if (roll < 36) return JadeId;
-            if (roll < 44) return FrozenTearId;
-            if (roll < 52) return IronBarId;
+            if (roll < 28) return AquamarineId;
+            if (roll < 38) return JadeId;
+            if (roll < 48) return FrozenTearId;
             if (roll < 58) return QuartzId;
-            if (roll < 64) return RefinedQuartzId;
-            if (roll < 70) return SlimeId;
-            if (roll < 76) return BatWingId;
+            if (roll < 66) return EarthCrystalId;
+            if (roll < 74) return ClayId;
             if (roll < 82) return RedMushroomId;
-            if (roll < 88) return ClayId;
-            if (roll < 94) return BoneFragmentId;
+            if (roll < 92) return CommonMushroomId;
             return DiamondId;
         }
 
+        // Copper layer: geodes, low gems, clay and cave carrots.
         if (roll < 18) return GeodeId;
-        if (roll < 28) return AmethystId;
-        if (roll < 36) return TopazId;
-        if (roll < 44) return EarthCrystalId;
-        if (roll < 50) return QuartzId;
-        if (roll < 56) return ClayId;
-        if (roll < 62) return CaveCarrotId;
-        if (roll < 68) return CommonMushroomId;
-        if (roll < 76) return CopperBarId;
-        if (roll < 82) return SlimeId;
-        if (roll < 88) return BugMeatId;
-        if (roll < 94) return RefinedQuartzId;
-        return DiamondId;
+        if (roll < 32) return AmethystId;
+        if (roll < 44) return TopazId;
+        if (roll < 54) return EarthCrystalId;
+        if (roll < 64) return QuartzId;
+        if (roll < 72) return ClayId;
+        if (roll < 82) return CaveCarrotId;
+        if (roll < 92) return CommonMushroomId;
+        return AmethystId;
     }
 }

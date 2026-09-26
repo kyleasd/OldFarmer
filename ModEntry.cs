@@ -30,6 +30,8 @@ internal sealed class ModEntry : Mod
     // created inside Entry() rather than the constructor.
     private MiningModule miningModule = null!;
 
+    private ModConfig _config = new();
+
     public ModEntry()
     {
         tillingModule    = new TillingModule();
@@ -55,10 +57,22 @@ internal sealed class ModEntry : Mod
         miningModule = new MiningModule(helper);
         SanBarDrawer.Load(helper);
 
+        // Config can be read here, but any mod-provided API (e.g. Generic Mod
+        // Config Menu) must only be accessed from GameLaunched once every mod
+        // has finished initializing.
+        _config = helper.ReadConfig<ModConfig>();
+        MiningModule.PrismaticShardChancePercent = _config.PrismaticShardChance;
+
+        helper.Events.GameLoop.GameLaunched += OnGameLaunched;
         helper.Events.GameLoop.UpdateTicked  += OnUpdateTicked;
         helper.Events.GameLoop.DayEnding     += OnDayEnding;
         helper.Events.Display.RenderedWorld  += OnRenderedWorld;
         helper.Events.Display.RenderedHud    += OnRenderedHud;
+    }
+
+    private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
+    {
+        RegisterGmcm();
     }
 
     private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
@@ -345,6 +359,41 @@ internal sealed class ModEntry : Mod
         // Summoning visual & sound effects
         Game1.currentLocation?.playSound("yoba");
         Game1.flashAlpha = 0.5f;
+    }
+
+    /// <summary>
+    /// Registers the editable options with Generic Mod Config Menu when it is
+    /// installed. Called from GameLaunched, when mod-provided APIs are available.
+    /// </summary>
+    private void RegisterGmcm()
+    {
+        var gmcm = Helper.ModRegistry.GetApi<IGenericModConfigMenuApi>("spacechase0.GenericModConfigMenu");
+        if (gmcm is null)
+            return;
+
+        gmcm.Register(
+            mod: ModManifest,
+            reset: () =>
+            {
+                _config = new ModConfig();
+                MiningModule.PrismaticShardChancePercent = _config.PrismaticShardChance;
+            },
+            save: () => Helper.WriteConfig(_config));
+
+        gmcm.AddNumberOption(
+            mod: ModManifest,
+            getValue: () => _config.PrismaticShardChance,
+            setValue: value =>
+            {
+                _config.PrismaticShardChance = value;
+                MiningModule.PrismaticShardChancePercent = value;
+            },
+            name: () => "五彩碎片掉落概率",
+            tooltip: () => "爷爷挖矿时掉落五彩碎片的概率（百分比）。默认为 0.9。",
+            min: 0f,
+            max: 100f,
+            interval: 0.1f,
+            formatValue: value => $"{value:0.0}%");
     }
 
     /// <summary>

@@ -6,5 +6,8 @@
   "UniqueID": "Kyle.OldFarmer",
   "EntryDll": "OldFarmer.dll",
   "MinimumApiVersion": "4.0.0",
-  "UpdateKeys": [ "Nexus:48316" ]
+  "UpdateKeys": [ "Nexus:48316" ],
+  "Dependencies": [
+    { "UniqueID": "spacechase0.GenericModConfigMenu", "IsRequired": false }
+  ]
 }

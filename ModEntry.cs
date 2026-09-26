@@ -1,3 +1,4 @@
+using HarmonyLib;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -46,7 +47,13 @@ internal sealed class ModEntry : Mod
     /// <param name="helper">Provides simplified APIs for writing mods.</param>
     public override void Entry(IModHelper helper)
     {
+        // Patch Game1.drawHUD / drawWithBorder so the custom SAN bar can take
+        // over the vanilla health/stamina hover readouts.
+        var harmony = new Harmony(ModManifest.UniqueID);
+        harmony.PatchAll(typeof(ModEntry).Assembly);
+
         miningModule = new MiningModule(helper);
+        SanBarDrawer.Load(helper);
 
         helper.Events.GameLoop.UpdateTicked  += OnUpdateTicked;
         helper.Events.GameLoop.DayEnding     += OnDayEnding;

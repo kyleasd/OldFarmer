@@ -11,4 +11,13 @@
     <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
   </ItemGroup>
 
+  <!-- Harmony is provided by SMAPI at runtime; reference the one it ships
+       so the public API matches exactly and no 0Harmony.dll is bundled. -->
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>$(GamePath)\smapi-internal\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
 </Project>
